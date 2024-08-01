@@ -1,0 +1,104 @@
+
+<div class="writing_outer">
+	<div class="writingDiv">
+		<a href="/papp/@{{_data_owner}}/com.salmanff.vulog" style="margin-top: 5px; position: relative; float: right; width: 40px;">
+			<img src="/app_files/@{{_data_owner}}/com.salmanff.vulog/public/static/logo.png" style="border-radius: 20px; max-width: 40px; max-height: 40px"/>
+		</a>
+
+		<div style="font-style: italic; color:#3f51b5; margin-top:3px;">
+			<span><img src="/publicfiles/@{{_data_owner}}/info.freezr.account/profilePict.jpg" imgerror="hide" style="max-width: 40px; max-height: 40px; border-radius: 20px"></span>
+		  <span>Shared by {{_data_owner}} using <span style="font-weight:bold; color:yellowgreen;">vulog</span></span>	
+			<span {{^__date_published}}style="display:none"{{/__date_published}}>
+					on {{__date_published}}
+			</span>
+		</div>
+
+		{{#vComments}}
+		<div style="margin-top: 5px">
+			<div style="text-align: left; color: rgb(104, 3, 104); background-color: lightgrey; border: 1px solid grey; padding: 3px; border-radius: 3px; margin-bottom: 5px;">
+				{{text}}
+			</div>
+		</div>
+		{{/vComments}}
+
+		<div id="vulog_show_if_extension_is_installed" style="display:none">
+			<a href="?vulogredirect=true">Go to site and see highlights</a>
+		</div>
+		<div id="vulog_show_if_NOT_installed">
+			<a href="https://chromewebstore.google.com/detail/vulog-logger-bookmarker-h/peoooghegmfpgpafglhhibeeeeggmfhb?pli=1">Get the vulog extension to see the highlights shared with you</a>
+		</div>
+
+		<hr/>
+
+		<div id="{{_id}}" style='font-family: "Lucida Sans Unicode", "Helvetica Neue", "Arial", sans-serif; font-size: 14px; padding:5px;'>
+
+				<div style="font-size:12px; font-style: italic; color:#3f51b5; float:right; margin-right:20px; display:none;">
+		      <span {{^__date_published}}style="display:none"{{/__date_published}}>
+		          Posted on {{__date_published}}
+		      </span>
+		    </div>
+
+				<div>
+					<img width="20px" {{^vulog_favIconUrl}}style="display:none"{{/vulog_favIconUrl}} src="{{vulog_favIconUrl}}"/>
+					<span style="font-weight:bold; color: grey;">{{domain_app}}</span><span style="font-weight:bold">{{domainApp}}</span>
+					  <span style="font-style: italic; {{^author}}display:none{{/author}}"> &nbsp; By {{author}}</span>
+						<span style="font-style: italic; {{^published}}display:none{{/published}}">({{published}})</span>
+				</div>
+
+				<a {{^title}} style="" {{/title}}
+		        {{#title}}style="font-weight: bold;"{{title}} {{/title}}
+		        href={{url}} target="_blank">
+				      {{#title}}{{title}}{{/title}} {{^title}} {{url}} {{/title}}
+				</a>
+
+			<div style="color:grey; min-width:100px">
+					{{#date}} date: {{date}} {{/date}}
+					{{description}}
+			</div>
+
+			<div style="align-items: center; justify-content: center;max-height:200px; margin-top:5px; margin-bottom:5px; border-radius:5px; overflow: hidden;display:{{^image}}none; {{/image}}{{#image}}flex;{{/image}}">
+				<img src="{{image}}" width="100%" ></div>
+
+			<div style="{{^vHighlights}} display:none; {{/vHighlights}} margin-bottom: 20px; text-align:center;">
+				<div style="font-size: medium; font-weight: bold; color: yellowgreen; text-align: left; margin-top: 10px;">Highlights</div>
+				{{#vHighlights}}
+					<div class="highlightOuter">
+						<div class="quote_outer" style="border-color: yellowgreen;">
+							<div style="display: grid; color: yellowgreen; grid-template-columns: 5px 1fr 5px; margin: 10px;">
+								<div class="quote_left"></div>
+								<div class="quote_inner" style="text-align: left">{{string}}</div>
+								<div class="quote_right"></div>
+							</div>
+							{{#vComments}}
+							<div style="margin-left: 20px; margin-top: 5px">
+								<div style="text-align: left; color: rgb(104, 3, 104); background-color: lightgrey; border: 1px solid grey; padding: 3px; border-radius: 3px; margin-right: 5px;">
+									{{text}}
+								</div>
+								<div style="padding-right: 5px; margin-bottom: 10px; margin-right: 0px; font-size: smaller; color: darkgray;">
+									<div style="float: right;">{{dateText}}</div>
+								</div>
+							</div>
+						{{/vComments}}
+						</div>
+					</div>
+				{{/vHighlights}}
+			</div>
+
+			<div style="color:#3f51b5; font-weight:bold; {{^vNote}}display:none{{/vNote}}">
+					{{vNote}}
+			</div>
+
+			<div style="display:none">
+					<div style="font-size:12px; font-style: italic; color:#3f51b5;">
+						Posted by {{_data_owner}}
+						<span {{^_date_modified}}style="display:none"{{/_date_modified}}>
+								on {{__date_modified}}
+						</span>
+					</div>
+					<div style="color:grey;{{^keywords}}display:none{{/keywords}}">
+						Key words: {{#keywords}} {{.}}{{/keywords}}
+					</div>
+			</div>
+		</div>
+	</div>
+</div>

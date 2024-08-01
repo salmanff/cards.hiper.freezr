@@ -1,0 +1,219 @@
+{
+  "identifier": "com.salmanff.vulog",
+  "display_name": "Vulog",
+  "version": "0.0.500",
+  "description": "A bookmarker, highlighter and web history logger",
+  "app_url": "https://github.com/salmanff/com.salmanff.vulog",
+  "manifest_url": "https://github.com/salmanff/com.salmanff.vulog/blob/main/manifest.json",
+
+  "files": {
+  },
+
+  "pages": {
+    "index": {
+      "page_title": "vulog - view marks and history",
+      "html_file": "view.html",
+      "css_files": ["public/sharedDrawTools/viewinTab.css", "public/sharedIosResources/overlay.css", "public/static/font-awesome.min.css", "public/sharedDrawTools/datepicker.css"],
+      "script_files": ["public/sharedDrawTools/dgelements.js", "public/sharedIosResources/utils.js", "public/sharedIosResources/overlay_constants.js", "public/sharedDrawTools/datepicker.js", "public/sharedDrawTools/drawUtils.js", "public/sharedDrawTools/lister.js", "view.js"]
+    },
+
+    "view": {
+      "page_title": "vulog - view marks and history",
+      "html_file": "view.html",
+      "css_files": ["public/sharedDrawTools/viewinTab.css", "public/sharedIosResources/overlay.css", "public/static/font-awesome.min.css", "public/sharedDrawTools/datepicker.css"],
+      "script_files": ["public/sharedDrawTools/dgelements.js", "public/sharedIosResources/utils.js", "public/sharedIosResources/overlay_constants.js", "public/sharedDrawTools/datepicker.js", "public/sharedDrawTools/drawUtils.js", "public/sharedDrawTools/lister.js", "view.js"]
+    }
+  },
+
+  "public_pages": {
+    "index": {
+      "page_title": "Vulog public history",
+      "html_file": "publicview.html",
+      "css_files": ["sharedDrawTools/viewinTab.css", "sharedIosResources/overlay.css", "static/font-awesome.min.css", "sharedDrawTools/datepicker.css"],
+      "script_files": ["sharedDrawTools/dgelements.js", "sharedIosResources/utils.js", "sharedIosResources/overlay_constants.js", "sharedDrawTools/datepicker.js", "sharedDrawTools/drawUtils.js", "sharedDrawTools/lister.js", "publicview.js"]
+    },
+
+    "publicmark": {
+      "page_title": "vulog - shared page",
+      "html_file": "vulog_ppage.html",
+      "css_files": ["vulog_ppage.css"],
+      "script_files": [],
+      "header_map": {
+        "author": { "field_name": "_owner", "text": "User:" },
+        "published": { "field_name": "__date_published" },
+        "title": { "field_name": "title" },
+        "image": { "field_name": "image" },
+        "description": { "field_name": "description" },
+        "twitter:card": { "field_name": "purl" },
+        "twitter:title": { "field_name": "title" },
+        "twitter:image": { "field_name": "image" },
+        "twitter:description": { "field_name": "description" },
+        "application-description": { "text": "Vulog is a browser extention for logging viewing history and managing bookmarks" }
+      }
+    }
+  },
+
+  "app_tables": {
+    "logs": {
+      "field_names": {
+        // vulog defined main fields
+        "url": { "type": "string", "description": "Full url fo the site" },
+        "purl": { "type": "string", "description": "the url without the query component" },
+        "domainApp": { "type": "string", "description": "App name if page meta data defines it, and if not the main domain" },
+
+        // scraped fields
+        "author": { "type": "string", "description": "Article author if available" },
+        "description": { "type": "string", "description": " " },
+        "image": { "type": "string", "description": " " },
+        "keywords": { "type": "string", "description": " " },
+        "modified": { "type": "string", "description": " " },
+        "other": { "type": "string", "description": " " },
+        "published": { "type": "string", "description": " " },
+        "title": { "type": "string", "description": " " },
+        "type": { "type": "string", "description": " " },
+
+        // frozen jlos fields
+        "fj_deleted": { "type": "string", "description": " " },
+        "fj_local_temp_unique_id": { "type": "string", "description": " " },
+        "fj_modified_locally": { "type": "string", "description": " " },
+
+        // vulog misc fields
+        "parser_err": { "type": "string", "description": " " },
+        "temp_unknown_tags": { "type": "string", "description": " " },
+        "vuLog_height": { "type": "string", "description": " " },
+        "vSearchWords": { "type": "array", "description": " " }, // old
+        "vSearchString": { "type": "string", "description": " " }, // 
+        "vulog_max_scroll": { "type": "string", "description": " " },
+        "vulog_msg_type": { "type": "string", "description": " " },
+        "vulog_time_incr": { "type": "string", "description": " " },
+        "vulog_timestamp": { "type": "string", "description": " " },
+        "vulog_ttl_time": { "type": "string", "description": " " },
+        "vulog_visit_details": { "type": "string", "description": " " },
+        "vulog_visits": { "type": "string", "description": " " }
+      }
+    },
+    "sharedmarks": {
+      "field_names": {
+        "isPublic": { "type": "boolean", "description": "states whether it is a public mark" },
+        "privateCodes": { "type": "array", "description": "Array of private codes" },
+        "url": { "type": "string", "description": " " },
+        "domainApp": { "type": "string", "description": " " },
+        "author": { "type": "string", "description": " " },
+        "description": { "type": "string", "description": " " },
+        "keywords": { "type": "string", "description": " " },
+        "vNote": { "type": "string", "description": " " },
+        "vHighlights": { "type": "object", "description": " " },
+        "vComments": { "type": "object", "description": " " },
+        "vCreated": { "type": "string", "description": " " },
+        "purl": { "type": "string", "description": " " },
+        "title": { "type": "string", "description": " " }
+      },
+
+      "rss_map": {
+        "title": "title",
+        "description": "description",
+        "pubDate": "__date_Published",
+        "imgurl": "image",
+        "imgtitle": null
+      }
+
+    },
+    "marks": {
+      "field_names": {
+        "fj_modified_locally": { "type": "date" },
+        "url": { "type": "string", "description": " " },
+        "domainApp": { "type": "string", "description": " " },
+        "type": { "type": "string", "description": " " },
+        "author": { "type": "string", "description": " " },
+        "description": { "type": "string", "description": " " },
+        "keywords": { "type": "string", "description": " " },
+        "other": { "type": "string", "description": " " },
+        "vNote": { "type": "string", "description": " " },
+        "vStars": { "type": "string", "description": " " },
+        "vHighlights": { "type": "object", "description": " " },
+        "vComments": { "type": "object", "description": " " },
+        "vSource": { "type": "string", "description": "" },
+        "vulog_msg_type": { "type": "string", "description": " " },
+        "vCreated": { "type": "string", "description": " " },
+        "vulog_ttl_time": { "type": "string", "description": " " },
+        "vulog_max_scroll": { "type": "string", "description": " " },
+        "vuLog_height": { "type": "string", "description": " " },
+        "temp_unknown_tags": { "type": "string", "description": " " },
+        "fj_modified_locally": { "type": "string", "description": " " },
+        "tabid": { "type": "string", "description": " " },
+        "fj_deleted": { "type": "string", "description": " " },
+        "purl": { "type": "string", "description": " " },
+        "title": { "type": "string", "description": " " }
+      },
+
+      "rss_map": {
+        "title": "title",
+        "description": "description",
+        "pubDate": "__date_Published",
+        "imgurl": "image",
+        "imgtitle": null
+      }
+    }
+  },
+
+  "permissions":
+    [{
+      "name": "public_link",
+      "type": "share_records",
+      "description": "Share bookmarks with your friends",
+      "table_id": "com.salmanff.vulog.sharedmarks",
+      "return_fields": ["author", "_owner", "description", "domainApp", "image", "keywords", "path", "purl", "title", "type", "url", "vSearchWords", "vSearchString", "date", "vNote", "vulog_favIconUrl", "vHighlights", "vComments"],
+      "search_fields": ["vSearchString"],
+      "pcard": "vulogcard.html",
+      "ppage": "publicmark"
+    },
+    {
+      "name": "message_link",
+      "type": "message_records",
+      "description": "Send bookmarks to your friends",
+      "table_id": "com.salmanff.vulog.sharedmarks",
+      "return_fields": ["author", "_owner", "description", "domainApp", "image", "keywords", "path", "purl", "title", "type", "url", "vSearchWords", "vSearchString", "date", "vNote", "vulog_favIconUrl", "vHighlights", "vComments"],
+      "search_fields": ["vSearchString"],
+      "pcard": "vulogcard.html",
+      "ppage": "publicmark"
+    },
+    {
+      "name": "link_share",
+      "type": "share_records",
+      "description": "This is the old version of bulog and is only here for legacy reasons",
+      "table_id": "com.salmanff.vulog.marks",
+      "return_fields": ["author", "_owner", "description", "domainApp", "image", "keywords", "path", "purl", "title", "type", "url", "vSearchWords", "vSearchString", "date", "vNote", "vulog_favIconUrl", "vHighlights", "vComments"],
+      "search_fields": ["vSearchWords"],
+      "pcard": "vulogcard.html",
+      "ppage": "publicmark"
+    },
+    {
+      "name": "friends",
+      "table_id": "dev.ceps.contacts",
+      "type": "write_all",
+      "description": "Reading contacts to share with"
+    },
+    {
+      "name": "groups",
+      "table_id": "dev.ceps.groups",
+      "type": "write_own",
+      "description": "Reading groups to share with"
+    },
+    {
+      "name": "privateCodes",
+      "table_id": "dev.ceps.privatefeeds.codes",
+      "type": "write_own",
+      "description": "private feeds"
+    }
+    ],
+
+  "standAloneApps": {
+    "ios": {
+      "link": "vulog://validatecredentials"
+    },
+    "chrome-extension": {
+      "install": "https://chrome.google.com/webstore/detail/vulog-logger-bookmarker-h/peoooghegmfpgpafglhhibeeeeggmfhb"
+    }
+  }
+
+}

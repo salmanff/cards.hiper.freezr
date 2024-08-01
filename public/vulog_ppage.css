@@ -1,0 +1,63 @@
+
+html {
+  height:100%
+}
+body {
+  height:100%
+}
+.writing_outer {
+    background-color: rgba(121, 240, 186, 0.59);
+    text-align:center;
+    border-bottom: 1px solid yellowgreen;
+    border-top: 1px solid yellowgreen;
+    margin:0;
+    overflow: scroll;
+    height: 100%;
+}
+.writingDiv{
+  font-family: "Lucida Sans Unicode", "Helvetica Neue", "Arial", sans-serif;
+  border-radius:20px;
+  padding:20px;
+  text-align:left;
+  max-width:600px;
+  margin:0 auto;
+  margin-top: 20px;
+  margin-bottom: 50px;
+  background-color:white;
+
+}
+#vulog_show_if_extension_is_installed, #vulog_show_if_NOT_installed {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* Highlights - quotes*/
+.quote_outer {
+  margin-bottom:5px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 2px red solid;
+}
+.quote_left{
+  display: inline-block;
+  vertical-align: top;
+  height: 20px;
+}
+.quote_right{
+  vertical-align: bottom;
+  align-self: end;
+  height: 15px;
+}
+.quote_left:before {
+  content: "“";
+  padding-right: 3px;
+  font-size: 24px;
+}
+.quote_right:after {
+  content: "”";
+  padding-right: 3px;
+  font-size: 24px;
+}
+.quote_inner {
+  padding: 5px 0px 0px 5px;
+}

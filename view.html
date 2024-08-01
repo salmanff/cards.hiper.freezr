@@ -1,0 +1,38 @@
+
+  <div id="viewInTabWindow">
+    <div id="topBar" class="topBarTabs topBarViewInTab">
+        <img id="top_logo" src="static/logo.png"/>
+        <span id="logo_text">vulog</span>
+        <span id="click_gototab_marks" class="tmChosen">Bookmarks</span>
+        <span id="click_gototab_history" class="tmClosed">History</span>
+        <span id="click_gototab_messages" class="tmClosed">Messages</span>
+        <span style="display:none" id="click_gototab_feed" class="tmClosed">Feed</span>
+    </div>
+
+    <div id="warning_outer" class="warning_outer warnOnFullPage">
+      <div id="click_closeWarnings"></div>
+      <div id="warnings"></div>
+    </div>
+ 
+
+    <br>
+    <div id="idSearchMarksBox" class="inputBox" contenteditable="true" data-placeholder=" &nbsp; Search"></div>
+    <div id="click_search_marks">Search</div>
+    <div id="click_search_filters"></div>
+    <div id="dateFormOuter">
+      <div id="dateFormInner">
+        Filters: 
+        <div class="form-container">
+          <form>
+            <i class="far fa-calendar-alt"></i>
+            <input type="text" placeholder="Latest date" id="dateInput" class="date-input">
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    <br/>
+    <div id="vulogRecords"></div>
+    <div id="spinner"></div>
+    <div id="morePages"></div>
+  </div>
