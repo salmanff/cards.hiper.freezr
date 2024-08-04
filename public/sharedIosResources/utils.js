@@ -128,11 +128,11 @@ const convertMarkToSharable = function (mark, options) {
 
       if (options?.excludeHlightComments || !hl.vComments || hl.vComments?.length === 0) {
         hl.vComments = []
-      } else { //(hl.vComments?.length > 0) 
+      } else { // (hl.vComments?.length > 0)
         const vComments = JSON.parse(JSON.stringify(hl.vComments))
         hl.vComments = []
         vComments.forEach((vComment) => {
-          highlight.vComments = JSON.parse(JSON.stringify(highlight.vComments))
+          hl.vComments = JSON.parse(JSON.stringify(hl.vComments))
             .filter(isOwnComment)
             .map(assignSenderIdAndHostFromFreezrMeta)
             .map(assignDateTextFromCreatedDate)
@@ -1123,6 +1123,8 @@ const overlayUtils = {
       const markCopy = convertMarkToSharable((vState.marks.lookups[purl] || getMarkFromVstateList(purl, { excludeHandC: true })), { excludeHlights: (from === 'inlineReply') })
       markCopy._id = null
 
+      if (!vState.environmentSpecificSendMessage) console.warn({ vState })
+      if (!vState.environmentSpecificSendMessage) console.warn({ environmentSpecificSendMessage: vState.environmentSpecificSendMessage })
       const { successFullSends, erroredSends } = await vState.environmentSpecificSendMessage({ chosenFriends, text, hLight, markCopy })
       // await sendMessage({ chosenFriends, text, hLight, markCopy })
 
@@ -1556,7 +1558,7 @@ const getParentWithClass = function (theDiv, className) {
 const appTableFromList = function (list) {
   switch (list) {
     case 'marks':
-      return 'com.salmanff.vulog.marks'
+      return 'cards.hiper.freezr.marks'
     case 'sentMsgs':
       return 'dev.ceps.messages.sent'
     // case 'messages':
@@ -1564,9 +1566,9 @@ const appTableFromList = function (list) {
     case 'gotMsgs':
       return 'dev.ceps.messages.got'
     case 'history':
-      return 'com.salmanff.vulog.logs'
+      return 'cards.hiper.freezr.logs'
     default:
-      return 'com.salmanff.vulog.marks'
+      return 'cards.hiper.freezr.marks'
   }
 }
 // Sorting

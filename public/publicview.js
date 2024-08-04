@@ -1,5 +1,5 @@
 /*
-    marks.js -> com.salmanff.vulog
+    marks.js -> cards.hiper.freezr
 
     version 0.0.3 - mid 2023
 
@@ -8,11 +8,10 @@
 /* global dg */ // from dgelements.js
 /* global freezr, freepr, freezrMeta */ // from freezr_core.js
 /* global lister */ // from lister.js
-/* global MCSS */ // from lister.js
 /* global sortByModifedDate, appTableFromList, convertListerParamsToDbQuery */ // from utils.js
 /* global smallSpinner */ // from drawUtils.js
 /* global Calendar */ // from datepicker.js
-// "initial_data": { "url": "/v1/pdbq/com.salmanff.vulog" }
+// "initial_data": { "url": "/v1/pdbq/cards.hiper.freezr" }
 const vState = {
   isLoggedIn: true,
   loadState: {
@@ -42,7 +41,7 @@ const vState = {
   //   if (!gotAll) {
   //     const apptable = appTableFromList(list)
   //     const q = { fj_deleted: { $ne: true } }
-  //     if (list === 'sentMsgs' || list === 'gotMsgs') q.app_id = 'com.salmanff.vulog'
+  //     if (list === 'sentMsgs' || list === 'gotMsgs') q.app_id = 'cards.hiper.freezr'
   //     const newItems = await freepr.feps.postquery({
   //       app_table: apptable, q, count, skip
   //     })
@@ -62,7 +61,7 @@ const vState = {
       console.warn('no oldestModified sent -DNBH')
       oldestModified = new Date().getTime()
     }
-    let q = { _date_modified: { $lt: oldestModified }, app_name: 'com.salmanff.vulog' }
+    let q = { _date_modified: { $lt: oldestModified }, app_name: 'cards.hiper.freezr' }
     let typeReturned
 
     if (!gotCount || gotCount < 100) { // 200 is a random limit for not sending back unfiltered items
@@ -74,7 +73,7 @@ const vState = {
     try {
       const data = { q }
       if (window.location.href.indexOf('/papp/@') > 0) {
-        data._data_owner = window.location.href.slice(window.location.href.indexOf('/papp/@') + 7, window.location.href.indexOf('/com.salmanff.vulog'))
+        data._data_owner = window.location.href.slice(window.location.href.indexOf('/papp/@') + 7, window.location.href.indexOf('/cards.hiper.freezr'))
       }
       const response = await fetch('/v1/pdbq', {
         method: 'POST',
@@ -100,23 +99,28 @@ const vState = {
   },
   environmentSpecificGetMark: async function (purl) {
     const marksFromServer = await freepr.feps.postquery({
-      app_table: 'com.salmanff.vulog.marks',
+      app_table: 'cards.hiper.freezr.marks',
       q: { fj_deleted: { $ne: true }, purl }
     })
     const mark = (marksFromServer && marksFromServer.length > 0) ? marksFromServer[0] : null
 
-    const q = { fj_deleted: { $ne: true }, app_id: 'com.salmanff.vulog' }
-    const gotMsgs = await freepr.feps.postquery({ app_table: appTableFromList('gotMsgs'), q })
-    const sentMsgs = await freepr.feps.postquery({ app_table: appTableFromList('sentMsgs'), q })
-    const messages = [...gotMsgs, ...sentMsgs]
+    try {
+      const q = { fj_deleted: { $ne: true }, app_id: 'cards.hiper.freezr', 'record.purl': purl }
+      const gotMsgs = await freepr.feps.postquery({ app_table: appTableFromList('gotMsgs'), q })
+      const sentMsgs = await freepr.feps.postquery({ app_table: appTableFromList('sentMsgs'), q })
+      const messages = [...gotMsgs, ...sentMsgs]
 
-    // todo - consider saving so same check doesnt need to be done multiple times
-    return { messages, mark }
+      // todo - consider saving so same check doesnt need to be done multiple times
+      return { messages, mark }
+    } catch (e) {
+      console.warn('Ignoring error getting messages', e)
+      return ( mark, messages: [] )
+    }
   },
   asyncMarksAndUpdateVstate: async function () {
     const q = { fj_deleted: { $ne: true }, _date_modified: { $gt: vState.marks.newestItem } }
     const newItems = await freepr.feps.postquery({
-      app_table: 'com.salmanff.vulog.marks', q
+      app_table: 'cards.hiper.freezr.marks', q
     })
 
     if (newItems && newItems.length > 0) {
@@ -134,7 +138,7 @@ const vState = {
     }
   },
   environmentSpecificSyncAndGetMessage: async function (purl) {
-    const q = { fj_deleted: { $ne: true }, app_id: 'com.salmanff.vulog', 'record.purl': purl }
+    const q = { fj_deleted: { $ne: true }, app_id: 'cards.hiper.freezr', 'record.purl': purl }
     let mergedMessages = null
     try {
       const recentSends = await freepr.feps.postquery({
@@ -149,6 +153,73 @@ const vState = {
       console.warn({ e })
       return { error: e }
     }
+  },
+  environmentSpecificSendMessage: async function (params) {
+    // params : { chosenFriends, text, hLight, markCopy }
+
+    const { chosenFriends, text, hLight, markCopy } = params
+    const successFullSends = []
+    const erroredSends = []
+
+    try {
+      if (!chosenFriends || chosenFriends.length === 0) throw new Error('No friends chosen')
+      if (!markCopy) throw new Error('mark copy could not be found', purl)
+      markCopy.vComments = []
+      const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
+      if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
+      markCopy._id = createRet._id
+    } catch (error) {
+      console.warn('err in sending msg', error)
+      return ({ error, successFullSends, erroredSends: chosenFriends })
+    }
+
+    const msgToSend = {
+      messaging_permission: 'message_link',
+      contact_permission: 'friends',
+      table_id: 'cards.hiper.freezr.sharedmarks',
+      record_id: markCopy._id,
+      record: markCopy
+    }
+
+    // should do promises all here
+    for (const idx in chosenFriends) {
+      const friend = chosenFriends[idx]
+
+      msgToSend.recipient_id = friend.username
+      msgToSend.recipient_host = friend.serverurl
+      msgToSend.record.vComments = [{
+        recipient_host: friend.serverurl,
+        recipient_id: friend.username,
+        sender_host: vState.freezrMeta.serverAddress,
+        sender_id: vState.freezrMeta.userId,
+        vCreated: new Date().getTime(),
+        text: hLight ? '' : text // if it is a highlight then the text goes in the highlights
+      }]
+      if (hLight) {
+        hLight.vComments = [{
+          recipient_host: friend.serverurl,
+          recipient_id: friend.username,
+          sender_host: vState.freezrMeta.serverAddress,
+          sender_id: vState.freezrMeta.userId,
+          vCreated: new Date().getTime(),
+          text // if it is a highlight then the text goes in the highlights
+        }]
+        msgToSend.record.vHighlights = [hLight]
+      }
+
+      try {
+        const sendRet = await freepr.ceps.sendMessage(msgToSend)
+        if (!sendRet || sendRet.error) throw new Error('Error sending message: ' + (sendRet?.error || 'unknown'))
+        successFullSends.push(friend)
+      } catch (e) {
+        console.error('error sending message', { e })
+        const errJson = JSON.parse(JSON.stringify(friend))
+        errJson.error = e.message
+        erroredSends.push(errJson)
+      }
+    }
+
+    return ({ successFullSends, erroredSends })
   },
   warningTimeOut: null,
   showWarning: function (msg, timing) {
@@ -196,15 +267,15 @@ const initState = async function () {
 
   vState.freezrMeta = freezrMeta || {}
 
-  vState.publicUser = window.location.pathname.slice((window.location.pathname.indexOf('/papp/') + '/papp/'.length), window.location.pathname.indexOf('/com.salmanff.vulog') )
+  vState.publicUser = window.location.pathname.slice((window.location.pathname.indexOf('/papp/') + '/papp/'.length), window.location.pathname.indexOf('/cards.hiper.freezr') )
   dg.el('top_logo').onerror = function () {
     // onsole.log('didnt get image ' + '/publicfiles/@' + vState.publicUser + '/info.freezr.account/profilePict.jpg')
-    // dg.el('top_logo').src = '/app_files/' + vState.publicUser + '/com.salmanff.vulog/public/static/logo.png'
+    // dg.el('top_logo').src = '/app_files/' + vState.publicUser + '/cards.hiper.freezr/public/static/logo.png'
     // dg.el('top_logo').onerror = null
   } 
   dg.el('top_logo').src = '/publicfiles/' + vState.publicUser + '/info.freezr.account/profilePict.jpg'
   dg.el('top_logo').style['border-radius'] = '25px'
-  dg.el('top_logo').nextElementSibling.innerText = vState.publicUser + "'s public vulog posts"
+  dg.el('top_logo').nextElementSibling.innerText = vState.publicUser + "'s public hiper.cards posts"
 
   try {
     vState.friends = vState.freezrMeta?.perms?.friends?.granted ? await freepr.feps.postquery({ app_table: 'dev.ceps.contacts', permission_name: 'friends' }) : []
@@ -225,7 +296,7 @@ const initState = async function () {
         data_owner_user: 'public',
         app_table: 'dev.ceps.privatefeeds.codes',
         permission: 'privateCodes',
-        app_id: 'com.salmanff.vulog'
+        app_id: 'cards.hiper.freezr'
       })
     }
   } catch (e) {
@@ -248,7 +319,7 @@ const initState = async function () {
 
   document.body.style['overflow-x'] = 'hidden'
 
-  await setUpDivsAndDrawItems(vState)
+  await setUpDivsAndDrawItems()
 }
 
 // const clickers = async function (evt) {
@@ -262,7 +333,7 @@ const initState = async function () {
 //     vState.queryParams.list = parts[2]
 //     resetHeaders()
 //     setTimeout(async () => {
-//       await setUpDivsAndDrawItems(vState)
+//       await setUpDivsAndDrawItems()
 //     }, 500)
 //   }
 // }
@@ -273,12 +344,12 @@ const resetHeaders = function () {
   dg.el('viewInTabWindow').style['background-color'] = 'rgba(121, 240, 186, 0.59)' // 'rgb(121 240 186 / 59%)'
   // if (document.querySelector('.tmChosen')) document.querySelector('.tmChosen').className = 'tmClosed'
   // if (document.getElementById('click_gototab_' + list)) document.getElementById('click_gototab_' + list).className = 'tmChosen'
-  const statePrePath = (window.location.pathname.indexOf('index.html') < 0) ? 'com.salmanff.vulog/' : ''
+  const statePrePath = (window.location.pathname.indexOf('index.html') < 0) ? 'cards.hiper.freezr/' : ''
   window.history.pushState(null, '', statePrePath + 'index.html?view=' + list)
 }
 
-const setUpDivsAndDrawItems = async function (vState) {
+const setUpDivsAndDrawItems = async function () {
   dg.el('dateFormOuter').style.display = 'none'
   dg.el('click_search_filters').style.display = 'block'
-  await lister.drawAllItemsForList(vState)
+  await lister.drawAllItemsForList()
 }

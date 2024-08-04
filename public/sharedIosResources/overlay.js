@@ -1,4 +1,4 @@
-// overlay.js - part of vulog
+// overlay.js - part of hiper.cards
 // Compare iosApp vs ChromeExtension - verified 2022-07-05
 
 // setCookieAndReload -> change to backend side keeping track
@@ -96,12 +96,12 @@ if (!isIos()) {
           const errors = []
           for (const [_id, vNote] of Object.entries(desktopOverlay.saver.saveList.vNotes)) {
             const markPartsCopy = { _id, vNote }
-            const result = await freepr.feps.update(markPartsCopy, { app_table: 'com.salmanff.vulog.marks', replaceAllFields: false })
+            const result = await freepr.feps.update(markPartsCopy, { app_table: 'cards.hiper.freezr.marks', replaceAllFields: false })
             if (!result || result.error) errors.push(result)
           }
           for (const [_id, vHighlights] of Object.entries(desktopOverlay.saver.saveList.hLights)) {
             const markPartsCopy = { _id, vHighlights }
-            const result = await freepr.feps.update(markPartsCopy, { app_table: 'com.salmanff.vulog.marks', replaceAllFields: false })
+            const result = await freepr.feps.update(markPartsCopy, { app_table: 'cards.hiper.freezr.marks', replaceAllFields: false })
             if (!result || result.error) errors.push(result)
           }
           if (errors.length === 0) {
@@ -115,7 +115,7 @@ if (!isIos()) {
 
     vState.showVulogOverlay = function (options) {
       // options fromKeyboard
-      
+
       let overlay
       if (document.getElementById('vulog_overlay_outer')) {
         overlay = document.getElementById('vulog_overlay_outer')
@@ -129,7 +129,7 @@ if (!isIos()) {
       //   overlay.appendChild(errDiv)
       // }
 
-      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'vulog'))
+      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'hiper.cards'))
 
       const aspan = overlayUtils.makeEl('span', 'vulog_overlay_cross_ch')
       aspan.onclick = vState.desktop_overlay.close
@@ -516,13 +516,13 @@ if (!isIos()) {
         //   sendResponse({ pageInfoFromPage: vState.pageInfoFromPage })
         
         // } else {
-        //   console.warn('unknown request from vulog background ', sender.tab, { request })
+        //   console.warn('unknown request from hiper.cards background ', sender.tab, { request })
         // }
       }
     )
 
     // When on freezr set up page, allow for automated sign in
-    if (window.location.pathname === '/account/app/settings/com.salmanff.vulog') {
+    if (window.location.pathname === '/account/app/settings/cards.hiper.freezr') {
       chrome.runtime.sendMessage({ msg: 'getFreezrInfo' }, function (response) {
         if (response && response.success) {
           // onsole.log('have extenstion installed on app set up page',window.location.href   )
@@ -552,7 +552,7 @@ if (!isIos()) {
                   (params.get('user') === freezrMeta.userId &&
                   loginUrl.indexOf(freezrMeta.serverAddress) === 0)
                 )) {
-              freezr.utils.applogin(loginUrl, 'com.salmanff.vulog', function (err, jsonResp) {
+              freezr.utils.applogin(loginUrl, 'cards.hiper.freezr', function (err, jsonResp) {
                 if (err || jsonResp.error || !jsonResp.appToken) {
                   callFwd({ success: false, message: 'unsuccessful attempt'})
                 } else {
@@ -666,7 +666,7 @@ if (!isIos()) {
 
     if (e.target.className.includes(HIGHLIGHT_CLASS)) {
       // handled on touch start
-    } else if (e.target.id.indexOf('vulog') !== 0 && selection.toString().length > 0) { // draw highlighter
+    } else if (e.target.id.indexOf('hiper_cards') !== 0 && selection.toString().length > 0) { // draw highlighter
       // e.target.id !== 'vulog_overlay_highlighter'
       const sRange = selection.getRangeAt(0)
       const sRect = sRange.getBoundingClientRect()
@@ -922,11 +922,7 @@ vState.setHColor = function (hColor, cb) {
     if (cb) cb(response)
   })
 }
-vState.environmentSpecificSendMessage = async function (params) {
-  // params : { chosenFriends, text, hLight, markCopy }
-  params.msg = 'sendMessage'
-  return await chrome.runtime.sendMessage(params)
-}
+
 
 // go to highlight
 vState.scrollToHighLight = function (hlightId) {

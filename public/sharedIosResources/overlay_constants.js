@@ -1,4 +1,4 @@
-// vulog constants for overlay etc
+// hiper.cards constants for overlay etc
 
 var HIGHLIGHT_CLASS = 'VULOG--highlighter--highlighted' 
 

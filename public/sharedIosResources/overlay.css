@@ -1,4 +1,4 @@
-/* Overlay.css for vulog  ios and browser extension*/
+/* Overlay.css for hiper.cards  ios and browser extension*/
 
 /* FOR SIMULATING IOS */
 #vulogIos_highlighter_outer{
@@ -270,7 +270,7 @@
 }
 
 
-/* ITEMS USED BY VULOG FREEZR APP 2023-09*/
+/* ITEMS USED BY HIPER CARDS FREEZR APP 2023-09*/
 #vulog_overlay_outer {
   font-family: "Lucida Sans Unicode", "Helvetica Neue", "Arial", sans-serif;
   position:fixed;

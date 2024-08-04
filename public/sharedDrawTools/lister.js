@@ -75,17 +75,15 @@ lister.getSearchBoxParams = function (searchBox) {
 }
 
 // draw structure
-lister.drawAllItemsForList = async function (vState) {
+lister.drawAllItemsForList = async function () {
   // called on load and also when new menu items are chosen
   const list = vState.queryParams.list
   const mainDiv = vState.divs.main
   mainDiv.innerHTML = ''
-  
-  // onsole.log('drawAllItemsForList', { list })
 
   window.scrollTo(0, 0)
 
-  lister.createOuterDomStructure(vState)
+  lister.createOuterDomStructure()
   lister.drawFilters(vState)
 
   let gotErr = false
@@ -98,7 +96,7 @@ lister.drawAllItemsForList = async function (vState) {
     vState.marks.lookups = {}
     
     try {
-      await lister.getMoreAndUpdateCountStatsFor('marks', vState)
+      await lister.getMoreAndUpdateCountStatsFor('marks')
     } catch (e) {
       console.warn('error in drawAllItemsForList ', e)
       gotErr = true
@@ -114,7 +112,7 @@ lister.drawAllItemsForList = async function (vState) {
     lister.endCard.showNoMore()
   } else if (!gotErr) {
     try {
-      const newItems = await lister.getMoreItems(vState)
+      const newItems = await lister.getMoreItems()
       lister.drawCardsOnMainDiv(list, newItems, mainDiv)
       vState.divs.spinner.style.display = 'none'
     } catch (e) {
@@ -136,7 +134,7 @@ lister.emptyFlexBox = function () {
 lister.endSpacer = function () {
   return dg.div({ style: { height: '300px', width: (document.body.getClientRects()[0].width - 100 + 'px'), 'min-height': '300px ' } })
 }
-lister.createOuterDomStructure = function (vState) {
+lister.createOuterDomStructure = function () {
   const list = vState.queryParams.list
   const mainDiv = vState.divs.main
   mainDiv.innerHTML = ''
@@ -144,7 +142,7 @@ lister.createOuterDomStructure = function (vState) {
   if (list === 'marks' || list === 'history' || list === 'tabs' || list === 'messages' || list === 'publicmarks') {
     const outer = dg.div({ className: (vState.viewType === 'fullHeight' ? 'heightColumsGridOuter' : 'widthFlexGridOuter') }) // lister.emptyFlexBox()
     mainDiv.appendChild(outer)
-    outer.appendChild(lister.endCard.create(vState))
+    outer.appendChild(lister.endCard.create())
     outer.appendChild(lister.endSpacer())
   } else {
     // atlernate way of doing history or others
@@ -156,7 +154,7 @@ lister.createOuterDomStructure = function (vState) {
 lister.endCard = {
   inited: false,
   endCardStyle: { display: 'none', margin: '50px 10px', 'text-align': 'center', cursor: 'pointer', 'border-radius': '5px', background: 'white', padding: '5px' },
-  create: function (vState) {
+  create: function () {
     const moreButt = dg.div({
       id: 'vulogMoreButt',
       style: lister.endCard.endCardStyle,
@@ -264,7 +262,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
   } else if (list === 'publicmarks') {
     const moreDiv = outer.lastChild.previousSibling
     items.forEach(alog => {
-      const theMark = lister.drawpublicmarkItem(alog, vState, { tabtype: list })
+      const theMark = lister.drawpublicmarkItem(alog, { tabtype: list })
       theMark.style.height = '0'
       // xx fullHeight
       theMark.style.margin = '0'
@@ -275,7 +273,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
     // for all new messages, check if already drawn and if so merge, and if not draw
     const moreDiv = outer.lastChild.previousSibling
     items.forEach(alog => {
-      const theMark = lister.drawMessageItem(alog, vState, { tabtype: list })
+      const theMark = lister.drawMessageItem(alog, { tabtype: list })
       theMark.style.width = '0'
       theMark.style.margin = '0'
       theMark.firstChild.style.transform = 'rotateY(90deg)'
@@ -489,7 +487,7 @@ lister.summarySharingAndHighlights = function (markOnMark) {
   summarySharingAndHighlights.appendChild(sharingButt)
   return summarySharingAndHighlights
 }
-lister.drawpublicmarkItem = function (markOnMark, vState, opt = {}) {
+lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
   const { fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -557,7 +555,7 @@ lister.drawpublicmarkItem = function (markOnMark, vState, opt = {}) {
 
     //  display: 'block', 'text-align': 'right', padding: '5px 0px', width: '100%',
     const openWithVulog = dg.a({ style: { float: 'right', 'font-size': 'small', 'font-weight': 'normal' } }, 'Open with hiper.cards')
-    openWithVulog.setAttribute('href', '/' + markOnMark._id + '?vulogredirect=true')
+    openWithVulog.setAttribute('href', '/' + markOnMark._id + '?hipercardsredirect=true')
     openWithVulog.setAttribute('target', '_blank')
     titleOuter.firstChild.appendChild(openWithVulog)
 
@@ -705,7 +703,7 @@ lister.drawlogItem = function (logItem, vState, opt = {}) {
 
   return lister.addCard2ndOuter(itemdiv, 'history')
 }
-lister.drawMessageItem = function (msgRecord, vState, opt = {}) {
+lister.drawMessageItem = function (msgRecord, opt = {}) {
   const { expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -1013,7 +1011,7 @@ lister.setItemExpandedStatus = async function (id, vState) {
   })
 }
 const refreshSharedMarksinVstateFor = async function (purl) {
-  vState.sharedmarks.lookups[purl] = await freepr.feps.postquery({ app_table: 'com.salmanff.vulog.sharedmarks', q: { purl } })
+  vState.sharedmarks.lookups[purl] = await freepr.feps.postquery({ app_table: 'cards.hiper.freezr.sharedmarks', q: { purl } })
   return true
 }
 
@@ -1089,7 +1087,7 @@ lister.domainSpanWIthRefInner = function (markOrLog, expandedView) {
         src: (markOrLog.vulog_favIconUrl ? markOrLog.vulog_favIconUrl : (this.getdomain(markOrLog.url) + '/favicon.ico')),
         onerror: function () {
           this.onerror = null
-          this.src = '/static/faviconGeneric.png'
+          this.src = freezr?.app?.isWebBased ? '/app_files/cards.hiper.freezr/public/static/faviconGeneric.png' : '/static/faviconGeneric.png'
         }
       })
     ),
@@ -1133,7 +1131,7 @@ lister.domainSpan = function (markOrLog) {
         src: (markOrLog.vulog_favIconUrl ? markOrLog.vulog_favIconUrl : (this.getdomain(markOrLog.url) + '/favicon.ico')),
         onerror: function () {
           this.onerror = null
-          this.src = '/static/faviconGeneric.png'
+          this.src = freezr?.app?.isWebBased ? '/app_files/cards.hiper.freezr/public/static/faviconGeneric.png' : '/static/faviconGeneric.png'
         }
       })
     ),
@@ -1422,7 +1420,7 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
 
   if (!perms.isLoggedIn) {
     outer.appendChild(dg.span({ style: { color: 'darkgrey' } }, 'Connect to a freezr server to be able to share your bookmarks, notes and highlights. '))
-    outer.appendChild(dg.a({ href: 'https://www.freezr.info' }, 'Cleck here to find out more about setting up a freezr server.'))
+    outer.appendChild(dg.a({ href: 'https://freezr.info' }, 'Cleck here to find out more about setting up a freezr server.'))
     outer.appendChild(dg.div(dg.br(), dg.div({ style: { 'color': 'grey' } }, dg.span('If you already have a feezr server, log in '), dg.a({ href: '/main/settings.html' }, 'on the setting page.'))))
     return outer
   }
@@ -1433,7 +1431,7 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
   const publicMark = getPublicMark(purl)
   const publicUrl = getPublicUrl(publicMark)
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: '/account/app/settings/com.salmanff.vulog' }, 'the link_share permission')))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission')))
   } else if (publicMark) {
     outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span(('Your bookmark was published.'), dg.a({ href: '/' + publicUrl }, 'You can find it here.'), dg.span(' Press the Public button for more options.'))))
   } else {
@@ -1445,7 +1443,7 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
   const privateUrl = getPrivateUrl(privateMark)
   outer.appendChild(dg.br())
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span('You can create a private link, protected b a code, to your bookmark by granting '), dg.a({ href: '/account/app/settings/com.salmanff.vulog' }, 'the link_share permission.')))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span('You can create a private link, protected b a code, to your bookmark by granting '), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission.')))
   } else if (privateMark) {
     outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span(('A private link has been created for your bookmark.'), dg.a({ href: '/' + privateUrl }, 'You can find it here.'), dg.span(' Press the Private button for more options.'))))
   } else {
@@ -1482,7 +1480,7 @@ drawSharingSubsection._public = function (purl, options) {
   outer.setAttribute('shareType', '_public')
 
   if (!perms.havePublicPerm) {
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href: '/account/app/settings/com.salmanff.vulog' }, 'Press here to grant the link_share permission.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -1531,14 +1529,14 @@ drawSharingSubsection._public = function (purl, options) {
             newMark.vComments = []
             if (messageBox.innerText) newMark.vComments = [{ text: messageBox.innerText, vCreated: new Date().getTime() }]
             newMark._id = publicMark._id
-            const updateRet = await freepr.feps.update(newMark, { app_table: 'com.salmanff.vulog.sharedmarks' })
+            const updateRet = await freepr.feps.update(newMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
-            const shareRet = await freepr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'com.salmanff.vulog.sharedmarks' })
+            const shareRet = await freepr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
             outer.innerHTML = ''
             outer.appendChild(dg.div(
               dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was republished.'), 
-              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/com.salmanff.vulog.sharedmarks/' + newMark._id, target: '_blank' }, 'You can find it here.')
+              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + newMark._id, target: '_blank' }, 'You can find it here.')
             ))
             await refreshSharedMarksinVstateFor(purl)
             outer.setAttribute('vStateChanged', 'true')
@@ -1561,10 +1559,10 @@ drawSharingSubsection._public = function (purl, options) {
         onlineAction: async function () {
           try {
             if (!publicMark) throw new Error('No public mark found')
-            const shareRet = await freepr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'deny', table_id: 'com.salmanff.vulog.sharedmarks' })
+            const shareRet = await freepr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error in shareRecords of mark: ' + (shareRet?.error || 'unknown'))
 
-            const deleteRet = await freepr.feps.delete(publicMark._id, { app_table: 'com.salmanff.vulog.sharedmarks' })
+            const deleteRet = await freepr.feps.delete(publicMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
             if (deleteRet.success) {
               outer.innerHTML = ''
@@ -1607,16 +1605,16 @@ drawSharingSubsection._public = function (purl, options) {
             if (!markCopy) throw new Error('No mark or log to convert')
             markCopy.isPublic = true
             // deal with case of crashing here - isPublic is true but it is not shared.
-            const createRet = await freepr.ceps.create(markCopy, { app_table: 'com.salmanff.vulog.sharedmarks' })
+            const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
             markCopy._id = createRet._id
 
-            const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'com.salmanff.vulog.sharedmarks' })
+            const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             vState.sharedmarks.lookups[purl].push(createRet)
             outer.innerHTML = ''
             outer.appendChild(dg.div(
               dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was published.'),
-              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/com.salmanff.vulog.sharedmarks/' + createRet._id, target: '_blank' }, 'You can find it here.')
+              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + createRet._id, target: '_blank' }, 'You can find it here.')
             ))
             await refreshSharedMarksinVstateFor(purl)
             outer.setAttribute('vStateChanged', 'true')
@@ -1643,7 +1641,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
   outer.setAttribute('shareType', '_privatelink')
 
   if (!perms.havePublicPerm) {
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href: '/account/app/settings/com.salmanff.vulog' }, 'Press here to grant the link_share permission.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -1686,9 +1684,9 @@ drawSharingSubsection._privatelink = function (purl, options) {
           try {
             privateMark.vComments = []
             if (messageBox.innerText) privateMark.vComments = [{ text: messageBox.innerText, vCreated: new Date().getTime() }]
-            const updateRet = await freepr.feps.update(privateMark, { app_table: 'com.salmanff.vulog.sharedmarks' })
+            const updateRet = await freepr.feps.update(privateMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
-            const shareRet = await freepr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'com.salmanff.vulog.sharedmarks' })
+            const shareRet = await freepr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
             outer.innerHTML = ''
             outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was republished. You can access it here'))
@@ -1714,9 +1712,9 @@ drawSharingSubsection._privatelink = function (purl, options) {
         onlineAction: async function () {
           try {
             if (!privateMark) throw new Error('No public mark found')
-            const shareRet = await freepr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'deny', table_id: 'com.salmanff.vulog.sharedmarks' })
+            const shareRet = await freepr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error in shareRecords of mark: ' + (shareRet?.error || 'unknown'))
-            const deleteRet = await freepr.feps.delete(privateMark._id, { app_table: 'com.salmanff.vulog.sharedmarks' })
+            const deleteRet = await freepr.feps.delete(privateMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
             if (deleteRet.success) {
               outer.innerHTML = ''
@@ -1737,7 +1735,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
     outer.appendChild(buttons)
     // add spinners and padding
   } else {
-    outer.appendChild(dg.div('You can create a private link to this bookmark so you can share a link with your contacts without forcing them to sign up for vulog. Your highlights and initial hilight comments will also be shared.'))
+    outer.appendChild(dg.div('You can create a private link to this bookmark so you can share a link with your contacts without forcing them to sign up for hiper.cards. Your highlights and initial hilight comments will also be shared.'))
     const messageBox = overlayUtils.editableBox({
       placeHolderText: 'Enter notes on the page'
     }, async function (e) {
@@ -1761,11 +1759,11 @@ drawSharingSubsection._privatelink = function (purl, options) {
 
             markCopy.isPublic = false
             // deal with case of crashing here - isPublic is true but it is not shared.
-            const createRet = await freepr.ceps.create(markCopy, { app_table: 'com.salmanff.vulog.sharedmarks' })
+            const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
             markCopy._id = createRet._id
 
-            const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'com.salmanff.vulog.sharedmarks' })
+            const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             vState.sharedmarks.lookups[purl].push(createRet)
             outer.innerHTML = ''
             outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('You created a shared bookmark.'), dg.a({ href: ('/' + shareRet._publicid + '?code=' + shareRet.code) }, 'Access it here.')))
@@ -1793,7 +1791,7 @@ drawSharingSubsection._privatefeed = function (purl, options) {
   outer.setAttribute('shareType', '_privatefeed')
 
   if (!perms.havePublicPerm || !perms.haveFeedPerm) {
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href: '/account/app/settings/com.salmanff.vulog' }, 'Press here to grant the link_share permission.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -1822,11 +1820,11 @@ drawSharingSubsection._privatefeed = function (purl, options) {
                 if (!markCopy) throw new Error('No mark or log to convert')
                 markCopy.isPublic = false
                 // deal with case of crashing here - isPublic is true but it is not shared.
-                const createRet = await freepr.ceps.create(markCopy, { app_table: 'com.salmanff.vulog.sharedmarks' })
+                const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
                 if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
                 markCopy._id = createRet._id
 
-                const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'com.salmanff.vulog.sharedmarks' })
+                const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
                 vState.sharedmarks.lookups[purl].push(createRet)
                 buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href: ('/ppage?feed=' + feedName + '&code=' + shareRet.code) }, 'feed!')))
                 await refreshSharedMarksinVstateFor(purl)
@@ -1852,11 +1850,11 @@ drawSharingSubsection._privatefeed = function (purl, options) {
           onlineAction: async function () {
             const buttonHolder = updateButt.parentElement
             try {
-              const updateRet = await freepr.feps.update(feedMark, { app_table: 'com.salmanff.vulog.sharedmarks' })
+              const updateRet = await freepr.feps.update(feedMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
               buttonHolder.innerHTML = ''
 
               if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
-              const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'com.salmanff.vulog.sharedmarks' })
+              const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
               if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
               buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Reposted!!'))
               await refreshSharedMarksinVstateFor(purl)
@@ -1878,9 +1876,9 @@ drawSharingSubsection._privatefeed = function (purl, options) {
             try {
               if (!feedMark) throw new Error('No public mark found')
               buttonHolder.innerHTML = ''
-              const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'deny', table_id: 'com.salmanff.vulog.sharedmarks' })
+              const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
               if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
-              const deleteRet = await freepr.feps.delete(feedMark._id, { app_table: 'com.salmanff.vulog.sharedmarks' })
+              const deleteRet = await freepr.feps.delete(feedMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
               if (!deleteRet || deleteRet.error) throw new Error('Error sharing: ' + (deleteRet?.error || 'unknown'))
               if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
               if (deleteRet.success) {
@@ -1919,7 +1917,7 @@ drawSharingSubsection._messages = function (purl, options) {
   if (!perms.haveMessagingPerm || !perms.haveContactsPerm) {
     const innerPerms = dg.span()
     if ((!perms.haveMessagingPerm && perms.haveContactsPerm) || (perms.haveMessagingPerm && !perms.haveContactsPerm)) innerPerms.innerText = 'You have only granted one of the two permissions'
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href: '/account/app/settings/com.salmanff.vulog' }, 'Press here to grant   permissions.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant   permissions.')))
     return outer
   }
 
@@ -2071,7 +2069,7 @@ lister.filterItemsInMainDivOrGetMore = async function (vState, source) {
     // doNothing - more button should work
   } else if (vState.loadState.autoTries < MAX_AUTO_INCREMENTS) {
     vState.loadState.autoTries++
-    const newItems = await lister.getMoreItems(vState)
+    const newItems = await lister.getMoreItems()
     // onsole.log('GETTING NEW ITEMS FROM SERVER vState.loadState.autoTries', vState.loadState.autoTries, { newShownNum, list, newItems })
     if (newItems.length === 0) {
       vState.loadState.gotAll = true
@@ -2360,7 +2358,7 @@ lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   }
   cardDiv.onclick = doSet ? showFullCard : null
 }
-lister.getMoreItems = async function (vState) {
+lister.getMoreItems = async function () {
   if (!vState.environmentSpecificGetOlderItems) {
     throw new Error('need to define environmentSpecificGetOlderItems to be able to get items')
   }
@@ -2369,16 +2367,16 @@ lister.getMoreItems = async function (vState) {
   // if (!vState[list]) vState[list] = lister.emptyStatsObj()
 
   if (list !== 'messages') {
-    return await lister.getMoreAndUpdateCountStatsFor(list, vState)
+    return await lister.getMoreAndUpdateCountStatsFor(list)
   } else { // messages is actually two lists that need to be merged
-    return await lister.getAllMessagesAndMerge(vState)
+    return await lister.getAllMessagesAndMerge()
   }
 }
-lister.getAllMessagesAndMerge = async function (vState) {
+lister.getAllMessagesAndMerge = async function () {
   // if (!vState.sentMsgs) vState.sentMsgs = lister.emptyStatsObj()
   // if (!vState.gotMsgs) vState.gotMsgs = lister.emptyStatsObj()
-  const newSentMsgs = await lister.getMoreAndUpdateCountStatsFor('sentMsgs', vState)
-  const newGotMsgs = await lister.getMoreAndUpdateCountStatsFor('gotMsgs', vState)
+  const newSentMsgs = await lister.getMoreAndUpdateCountStatsFor('sentMsgs')
+  const newGotMsgs = await lister.getMoreAndUpdateCountStatsFor('gotMsgs')
   const newItems = lister.mergeNewAndExistingMessages([], newSentMsgs, newGotMsgs) // note - really [] shoul;d be replaced by vState.messages.unfilteredItems - chec why old and new were seaprated befpore
 
   if (!vState.messages) vState.messages = lister.emptyStatsObj()
@@ -2474,7 +2472,7 @@ lister.resetDatesForList = function (list) {
   statsObject.dates.newestModified = mergedList.reduce((acc, item) => Math.max((item?._date_modified || item?.fj_modified_locally || 0), acc), 0)
   statsObject.dates.oldestCreated = mergedList.reduce((acc, item) => Math.min((item?.vCreated || item?._date_created || new Date().getTime()), acc), new Date().getTime())
 }
-lister.getMoreAndUpdateCountStatsFor = async function (list, vState) {
+lister.getMoreAndUpdateCountStatsFor = async function (list) {
   // onsole.log(' getMoreAndUpdateCountStatsFor')
   // this should only be used in getMoreItems or for marks, as it doesnt add the hasmarks key to the record
 
