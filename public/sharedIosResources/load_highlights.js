@@ -14,7 +14,7 @@ const initiateHighlights = function () {
 
     chrome.runtime.sendMessage({ purl: vState.pageInfoFromPage.purl, msg: 'getMarkFromVulog' }, function (response) {
       if (!response || response.error) {
-        console.warn(response || 'No response from hiper.cards extension - internal error?')
+        console.warn(response || 'No response from vulog extension - internal error?')
       } else {
         freezrMeta = response.freezrMeta
         if (response.mark) vState.ownMark = response.mark

@@ -107,7 +107,8 @@ const convertLogToMark = function (logtomark, options) {
 
   if (!newmark.url) newmark.url = newmark.purl
 
-  if (!newmark.url) throw Error('trying to convert log to mark with nopurl ', logtomark)
+  if (!newmark.url) console.warn('trying to convert log to mark with nopurl ', logtomark)
+  if (!newmark.url) throw Error('trying to convert log to mark with nopurl ')
   return newmark
 }
 
@@ -128,11 +129,11 @@ const convertMarkToSharable = function (mark, options) {
 
       if (options?.excludeHlightComments || !hl.vComments || hl.vComments?.length === 0) {
         hl.vComments = []
-      } else { // (hl.vComments?.length > 0)
+      } else { //(hl.vComments?.length > 0) 
         const vComments = JSON.parse(JSON.stringify(hl.vComments))
         hl.vComments = []
         vComments.forEach((vComment) => {
-          hl.vComments = JSON.parse(JSON.stringify(hl.vComments))
+          highlight.vComments = JSON.parse(JSON.stringify(highlight.vComments))
             .filter(isOwnComment)
             .map(assignSenderIdAndHostFromFreezrMeta)
             .map(assignDateTextFromCreatedDate)
@@ -319,36 +320,39 @@ const resetVulogKeyWords = function (logOrMark) { // for vSearchString
   // if val is object need to get into it... eg highlights
   const ADD_FIELDS = ['url', 'title', 'description', 'vNote', 'author', 'referrer', 'redirectOrigin']
   ADD_FIELDS.forEach(field => {
-    words = addToListAsUniqueItems(words, logOrMark[field])
+    words = addToListAsUniqueItems(words, cleanTextForEasySearch(logOrMark[field]))
   })
 
   if (logOrMark.vComments && logOrMark.vComments.length > 0) {
     logOrMark.vComments.forEach(aComment => {
-      words = addToListAsUniqueItems(words, aComment.text)
-      words = addToListAsUniqueItems(words, aComment.creator)
-      words = addToListAsUniqueItems(words, aComment.recipient_id)
-      words = addToListAsUniqueItems(words, aComment.sender_id)
+      words = cleanAndAddToList(words, aComment.text)
+      words = cleanAndAddToList(words, aComment.creator)
+      words = cleanAndAddToList(words, aComment.recipient_id)
+      words = cleanAndAddToList(words, aComment.sender_id)
       // todo - add host??
     })
   }
 
   if (logOrMark.vHighlights && logOrMark.vHighlights.length > 0) {
     logOrMark.vHighlights.forEach(aHigh => {
-      words = addToListAsUniqueItems(words, aHigh.string)
-      words = addToListAsUniqueItems(words, aHigh.vNote)
+      words = cleanAndAddToList(words, aHigh.string)
+      words = cleanAndAddToList(words, aHigh.vNote)
 
       if (aHigh.vComments && aHigh.vComments.length > 0) {
         aHigh.vComments.forEach(aComment => {
-          words = addToListAsUniqueItems(words, aComment.text)
-          words = addToListAsUniqueItems(words, aComment.creator)
-          words = addToListAsUniqueItems(words, aComment.recipient_id)
-          words = addToListAsUniqueItems(words, aComment.sender_id)
+          words = cleanAndAddToList(words, aComment.text)
+          words = cleanAndAddToList(words, aComment.creator)
+          words = cleanAndAddToList(words, aComment.recipient_id)
+          words = cleanAndAddToList(words, aComment.sender_id)
           // todo - add host??
         })
       }
     })
   }
-  return ' ' + cleanTextForEasySearch(words.join(' ')) + ' ' // adding spaces so in future full words can also be found by seaerch for " word "
+  return ' ' + words.join(' ').trim() + ' ' // adding spaces so in future full words can also be found by seaerch for " word "
+}
+const cleanAndAddToList = function (aList, items) {
+  return addToListAsUniqueItems(aList, cleanTextForEasySearch(items))
 }
 const addToListAsUniqueItems = function (aList, items, transform) {
   // takes two lists..  integrates items into aList without duplicates
@@ -359,17 +363,18 @@ const addToListAsUniqueItems = function (aList, items, transform) {
   if (typeof items === 'string' || !isNaN(items)) items = items.split(' ')
   if (!Array.isArray(items)) { throw new Error('items need to be a list') }
   if (transform) items = items.map(transform)
-  items.forEach(function (anItem) { if (anItem && anItem !== ' ' && aList.indexOf(anItem) < 0 && anItem.length > 0) aList.push(anItem) })
+  items.forEach(function (anItem) { if (anItem && anItem.trim() !== '' && aList.indexOf(anItem) < 0 && anItem.length > 0) aList.push(anItem.trim()) })
   return aList
 }
 const cleanTextForEasySearch = function (aText) {
   // onsole.log('cleaning '+aText)
+  if (!aText) return ''
   if (Array.isArray(aText)) aText = aText.join(' ')
 
   try {
-    aText = decodeURIComponent(aText + '')
+    aText = decodeURIComponent((aText + '').replace(/\s+/g, ' ').replace(/[\r\n]+/gm, ' '))
   } catch (e) {
-    console.warn('could not decode uri ', { e, aText }) // nb need to remove whtespace and line breaks...
+    console.warn('could not decode uri ', { e, aText })
   }
   aText = aText.replace(/é/g, 'e').replace(/è/g, 'e').replace(/ö/g, 'o').replace(/à/g, 'a').replace(/ä/g, 'a')
   // .replace(/%/g, 'à')
@@ -623,33 +628,39 @@ const overlayUtils = {
   },
   drawSmallStars: function (mark) {
     const stardiv = document.createElement('div')
-    const ALL_STARS = ['bookmark', 'star', 'inbox', 'vNote', 'vHighlights']
-    ALL_STARS.forEach(aStar => {
-      const adiv = this.makeEl('div', null, null)
-      adiv.innerContent = ' '
-      let chosen = false
-      switch (aStar) {
-        case 'bookmark':
-          chosen = Boolean(mark)
-          break
-        case 'vNote':
-          chosen = mark && mark.vNote
-          break
-        case 'vHighlights':
-          chosen = (mark && mark.vHighlights && mark.vHighlights.length > 0)
-          break
-        default:
-          chosen = mark?.vStars && mark.vStars.includes(aStar)
-          break
-      }
-      adiv.className = ('vulog_overlay_' + aStar + (chosen ? '_ch' : '_nc'))
-      adiv.style['margin-left'] = '-5px'
-      adiv.style['margin-right'] = '-5px'
-      adiv.style.scale = 0.5
-      stardiv.appendChild(adiv)
-    })
+    if (mark){
+      const ALL_STARS = ['bookmark', 'star', 'inbox', 'vNote', 'vHighlights']
+      ALL_STARS.forEach(aStar => {
+        const adiv = this.makeEl('div', null, null)
+        adiv.innerContent = ' '
+        let chosen = false
+        switch (aStar) {
+          case 'bookmark':
+            chosen = Boolean(mark)
+            break
+          case 'vNote':
+            chosen = mark && mark.vNote
+            break
+          case 'vHighlights':
+            chosen = (mark && mark.vHighlights && mark.vHighlights.length > 0)
+            break
+          default:
+            chosen = mark?.vStars && mark.vStars.includes(aStar)
+            break
+        }
+        adiv.className = ('vulog_overlay_' + aStar + (chosen ? '_ch' : '_nc'))
+        adiv.style['margin-left'] = '-5px'
+        adiv.style['margin-right'] = '-5px'
+        adiv.style.scale = 0.5
+        stardiv.appendChild(adiv)
+      })
+      // stardiv.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, ' .. '))
+    } else {
+      stardiv.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '0px', color: 'lightgrey' } }, ' Click to expand ... '))
+    }
+    
     stardiv.style.display = 'inline-block'
-    stardiv.style['margin-top'] = '-5px'
+    stardiv.style['margin-top'] = '-7px'
     return stardiv
   },
   editableBox: function (opts = {}, onkeyup) {
@@ -676,6 +687,7 @@ const overlayUtils = {
     // todo and check -> does this work with converting log to mark
     if (!options.mainNoteSaver) {
       options.mainNoteSaver = async function (mark) {
+        console.log('saving from DEFAULT main notes box saver')
         const purl = mark.purl
         const id = mark?._id // Should be different if it is a log ?
         const msg = 'saveMainComment'
@@ -690,6 +702,7 @@ const overlayUtils = {
       mark.vNote = notes
       const response = await options.mainNoteSaver(mark, options)
       if (!response || response.error) {
+        console.warn((response ? response.error : 'error saving note'))
         let errBox = evt.target.nextSibling
         if (!errBox) {
           errBox = overlayUtils.makeEl('div', null, 'noteErrBox')
@@ -1123,8 +1136,6 @@ const overlayUtils = {
       const markCopy = convertMarkToSharable((vState.marks.lookups[purl] || getMarkFromVstateList(purl, { excludeHandC: true })), { excludeHlights: (from === 'inlineReply') })
       markCopy._id = null
 
-      if (!vState.environmentSpecificSendMessage) console.warn({ vState })
-      if (!vState.environmentSpecificSendMessage) console.warn({ environmentSpecificSendMessage: vState.environmentSpecificSendMessage })
       const { successFullSends, erroredSends } = await vState.environmentSpecificSendMessage({ chosenFriends, text, hLight, markCopy })
       // await sendMessage({ chosenFriends, text, hLight, markCopy })
 
@@ -1309,6 +1320,8 @@ const overlayUtils = {
     return imgDiv
   },
   personPictUrl: function (personId, personHost) {
+    if (!personHost && vState?.isExtension) personHost = vState.freezrMeta?.serverAddress
+    console.log('creating person pict url for ', { personId, personHost, url: ((personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg') })
     return (personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg'
   },
   fullPersonString: function (personId, personHost) {
@@ -1646,9 +1659,20 @@ const convertPasteToText = function (evt) {
   const text = evt.clipboardData.getData('text/plain')
   evt.target.innerText += text
 }
+function isEmpty (obj) {
+  // stackoverflow.com/questions/4994201/is-object-empty
+  if (obj == null) return true
+  if (Object.keys(obj).length > 0) return false
+  if (Object.keys(obj).length === 0) return true
+  for (var key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) return false
+  }
+  return true
+}
 
 const utilsDummy = false // for eslint exports
 if (utilsDummy) { // exported vars
+  isEmpty()
   isIos()
   appTableFromList()
   endsWith()

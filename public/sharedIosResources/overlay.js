@@ -1,4 +1,4 @@
-// overlay.js - part of hiper.cards
+// overlay.js - part of vulog
 // Compare iosApp vs ChromeExtension - verified 2022-07-05
 
 // setCookieAndReload -> change to backend side keeping track
@@ -113,9 +113,12 @@ if (!isIos()) {
       },
     }
 
+    vState.notesBoxTimer = {
+      lastKeyDown: null,
+    }
     vState.showVulogOverlay = function (options) {
       // options fromKeyboard
-
+      
       let overlay
       if (document.getElementById('vulog_overlay_outer')) {
         overlay = document.getElementById('vulog_overlay_outer')
@@ -129,7 +132,7 @@ if (!isIos()) {
       //   overlay.appendChild(errDiv)
       // }
 
-      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'hiper.cards'))
+      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'vulog'))
 
       const aspan = overlayUtils.makeEl('span', 'vulog_overlay_cross_ch')
       aspan.onclick = vState.desktop_overlay.close
@@ -141,7 +144,33 @@ if (!isIos()) {
       stardiv.appendChild(overlayUtils.drawstars((vState.ownMark || parsedPage.props), { markOnBackEnd: vState.markOnBackEnd }))
 
       overlay.appendChild(stardiv)
-      const notesBox = overlayUtils.drawMainNotesBox(vState.ownMark, { log: vState.pageInfoFromPage, defaultHashTag: vState.defaultHashTag })
+      const notesBox = overlayUtils.drawMainNotesBox(vState.ownMark, {
+        log: vState.pageInfoFromPage, 
+        defaultHashTag: vState.defaultHashTag,
+        mainNoteSaver: async function (mark) {
+          console.log('mainnote saver started')
+          vState.notesBoxTimer.lastKeyDown = new Date().getTime()
+          const TIMELIMIT = 3000
+          function delay(ms) { // from https://www.pentarem.com/blog/how-to-use-settimeout-with-async-await-in-javascript/
+            return new Promise(resolve => setTimeout(resolve, ms));
+          }
+          await delay(TIMELIMIT)
+          const nowTime = new Date().getTime()
+          console.log('time diff:', (nowTime - vState.notesBoxTimer.lastKeyDown))
+          if (nowTime - vState.notesBoxTimer.lastKeyDown >= TIMELIMIT) {
+            console.log('saving from overlay main notes box saver')
+            const purl = mark.purl
+            const id = mark?._id // Should be different if it is a log ?
+            const msg = 'saveMainComment'
+            const response = await chrome.runtime.sendMessage({ msg, purl, notes: mark.vNote, props: mark, id })
+            console.log('got send message resp', { response })
+            return response 
+          } else {
+            console.log('wait to stop typing')
+            return { success: true, note: 'not saving yet - waiting to stop typing'}
+          }
+        }
+      })
       overlay.appendChild(notesBox)
       if (options?.fromKeyboard) setTimeout(() => { notesBox.focus() }, 10)
 
@@ -516,7 +545,7 @@ if (!isIos()) {
         //   sendResponse({ pageInfoFromPage: vState.pageInfoFromPage })
         
         // } else {
-        //   console.warn('unknown request from hiper.cards background ', sender.tab, { request })
+        //   console.warn('unknown request from vulog background ', sender.tab, { request })
         // }
       }
     )
@@ -666,7 +695,7 @@ if (!isIos()) {
 
     if (e.target.className.includes(HIGHLIGHT_CLASS)) {
       // handled on touch start
-    } else if (e.target.id.indexOf('hiper_cards') !== 0 && selection.toString().length > 0) { // draw highlighter
+    } else if (e.target.id.indexOf('vulog') !== 0 && selection.toString().length > 0) { // draw highlighter
       // e.target.id !== 'vulog_overlay_highlighter'
       const sRange = selection.getRangeAt(0)
       const sRect = sRange.getBoundingClientRect()
@@ -922,7 +951,6 @@ vState.setHColor = function (hColor, cb) {
     if (cb) cb(response)
   })
 }
-
 
 // go to highlight
 vState.scrollToHighLight = function (hlightId) {

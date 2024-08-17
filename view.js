@@ -361,7 +361,7 @@ const initState = async function () {
   vState.divs.dateFilter = dg.el('dateInput')
   vState.calendar = new Calendar('#dateInput')
   vState.calendar.onChooseDate = async function (e) {
-    await lister.filterItemsInMainDiv(vState, 'searchChange')
+    await lister.filterItemsInMainDivOrGetMore('searchChange')
   }
 
   vState.freezrMeta = freezrMeta || {}
@@ -378,7 +378,7 @@ const initState = async function () {
     console.error('error in getting contacts at initstate', e)
   }
 
-  lister.setDivListeners(vState)
+  lister.setDivListeners()
 
   const lists = ['messages', 'history', 'marks']
   lists.forEach(list => { dg.el('click_gototab_' + list).onclick = clickers })
@@ -427,7 +427,7 @@ const clickers = async function (evt) {
     if (list === parts[2]) return
 
     vState.divs.spinner.style.display = 'block'
-    lister.showHideCardsBasedOnFilters.hideAll(vState)
+    lister.showHideCardsBasedOnFilters.hideAll()
     vState.queryParams.list = parts[2]
     resetHeaders()
     setTimeout(async () => {

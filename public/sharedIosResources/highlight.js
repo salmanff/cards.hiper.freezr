@@ -90,7 +90,7 @@ const highlightFromSelection = function (highlightObj, selection, container) {
 
     var startRe, endRe, sanitizeRe
 
-    // sf removed alreadyHighlighted comncept as hiper.cards has manual remove
+    // sf removed alreadyHighlighted comncept as vulog has manual remove
     startRe = new RegExp(escapeRegex(DELIMITERS.start), 'g')
     endRe = new RegExp(escapeRegex(DELIMITERS.end), 'g')
     content = content.replace(startRe, replacements.start).replace(endRe, replacements.end)

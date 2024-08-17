@@ -13,7 +13,7 @@
 
 const lister = {}
 // Initialization and search
-lister.setDivListeners = function (vState) {
+lister.setDivListeners = function () {
   const { divs } = vState
   if (!divs || !divs.searchBox || !divs.main || !divs.searchButton) {
     console.error('need divs for lister to work')
@@ -23,20 +23,20 @@ lister.setDivListeners = function (vState) {
     if (evt.key === 'Enter') { evt.preventDefault() }
   }
   divs.searchBox.onkeyup = async function (e) {
-    await lister.filterItemsInMainDivOrGetMore(vState, 'searchChange')
+    await lister.filterItemsInMainDivOrGetMore('searchChange')
   }
   divs.searchBox.onpaste = async function (e) {
     convertPasteToText(e)
-    await lister.filterItemsInMainDivOrGetMore(vState, 'searchChange')
+    await lister.filterItemsInMainDivOrGetMore('searchChange')
   }
   divs.searchButton.onclick = async function (e) {
-    await lister.filterItemsInMainDivOrGetMore(vState, 'searchChange')
+    await lister.filterItemsInMainDivOrGetMore('searchChange')
   }
   if (divs.dateFilter) {
     divs.dateFilter.onkeyup = async function (e) {
       if (e.key === 'Enter') {
         e.preventDefault()
-        await lister.filterItemsInMainDivOrGetMore(vState, 'searchChange')
+        await lister.filterItemsInMainDivOrGetMore('searchChange')
         vState.calendar.hideCalendar()
         divs.dateFilter.blur()
       }
@@ -80,11 +80,11 @@ lister.drawAllItemsForList = async function () {
   const list = vState.queryParams.list
   const mainDiv = vState.divs.main
   mainDiv.innerHTML = ''
-
+  
   window.scrollTo(0, 0)
 
   lister.createOuterDomStructure()
-  lister.drawFilters(vState)
+  lister.drawFilters()
 
   let gotErr = false
 
@@ -107,7 +107,7 @@ lister.drawAllItemsForList = async function () {
     if (list === 'tabs') console.error('snbh drawAllItemsForList')
     lister.drawCardsOnMainDiv(list, vState[list].unfilteredItems, mainDiv)
     vState.divs.spinner.style.display = 'none'
-  } else if (!gotErr && vState[list] && vState[list].unfilteredItems.length === 0) {
+  } else if (!gotErr && vState[list] && list !== 'tabs' && vState[list].unfilteredItems.length === 0) {
     vState.divs.spinner.style.display = 'none'
     lister.endCard.showNoMore()
   } else if (!gotErr) {
@@ -124,7 +124,7 @@ lister.drawAllItemsForList = async function () {
     vState.showWarning('There was a problem syncing with the server. Sorry.', 2000)
   } else {
     setTimeout(() => {
-      if (list !== 'tabs') lister.filterItemsInMainDivOrGetMore(vState, 'initialLoad')
+      lister.filterItemsInMainDivOrGetMore('initialLoad')
     }, 20)
   }
 }
@@ -160,7 +160,7 @@ lister.endCard = {
       style: lister.endCard.endCardStyle,
       onclick: async function (e) {
         lister.endCard.showLoading()
-        await lister.filterItemsInMainDivOrGetMore(vState, 'moreButt')
+        await lister.filterItemsInMainDivOrGetMore('moreButt')
       }
     }, 'more')
     const observerOptions = {
@@ -169,7 +169,7 @@ lister.endCard = {
       threshold: 0.1
     }
     const moreButtObserver = new IntersectionObserver(function () {
-      if (lister.endCard.inited) lister.filterItemsInMainDivOrGetMore(vState, 'auto')
+      if (lister.endCard.inited) lister.filterItemsInMainDivOrGetMore('auto')
       lister.endCard.inited = true
     }, observerOptions)
     moreButtObserver.observe(moreButt)
@@ -185,7 +185,7 @@ lister.endCard = {
     return dg.div({ style: { height: '200px', width: '200px', margin: '25px 15px 65px 15px', 'vertical-align': 'center', display: 'none' } },
       moreButt, noMoreButt, loadingButt)
   },
-  showMore: function (vState) {
+  showMore: function () {
     const list = vState.queryParams.list
     const moreButt = dg.el('vulogMoreButt', { clear: true, show: true })
     moreButt.appendChild(dg.div(
@@ -253,7 +253,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
   if (list === 'marks') {
     const moreDiv = outer.lastChild.previousSibling
     items.forEach(alog => {
-      const theMark = lister.drawmarkItem(alog, vState, { tabtype: list })
+      const theMark = lister.drawmarkItem(alog, { tabtype: list })
       theMark.style.width = '0'
       theMark.style.margin = '0'
       theMark.firstChild.style.transform = 'rotateY(90deg)'
@@ -319,7 +319,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
           alog.vulog_visit_details = [...(alog.vulog_visit_details || []), ...(items[i + 1]?.vulog_visit_details || [])]
           i++
         }
-        const theLogDiv = lister.drawlogItem(alog, vState, { tabtype: list })
+        const theLogDiv = lister.drawlogItem(alog, { tabtype: list })
         theLogDiv.style.width = '0'
         theLogDiv.style.margin = '0'
         theLogDiv.firstChild.style.transform = 'rotateY(90deg)'
@@ -332,41 +332,211 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
     }
     setTimeout(() => { moreDiv.style.dispaly = 'block' }, 100)
   } else if (list === 'tabs') {
-    // const moreDiv = outer.lastChild.previousSibling
+
+    // inmitiate page refresh listener if it hasnt been initiated already
+    if (!vState.tabs) { 
+      window.addEventListener('focus', function() {
+        // onsole.log('Window focus gained focus!') // https://www.codeease.net/programming/javascript/javascript-detect-if-the-browser-tab-is-active
+        const list = vState.queryParams.list
+        if (list === 'tabs') {
+          lister.drawAllItemsForList()
+        }
+      })
+      // window.addEventListener('blur', function() { });
+    }
+    const openWindows = {}
+    const closedWindows = {}
+    const incognitoWindowIds = []
+    let closedWindowCount = 0
+    items.currentTabs.forEach(tab => {
+      if (!openWindows[tab.windowId]) openWindows[tab.windowId] = {}
+      openWindows[tab.windowId][tab.id] = { open: true, tabDetails: tab, tabHistory: []}
+      if (tab.incognito) incognitoWindowIds.push(tab.windowId) // openWindows[tab.windowId].incognito = true
+    })
+    for (let tabid in items.logDetailsInRAM) {
+      const tabHistory = items.logDetailsInRAM[tabid] 
+      if (!openWindows[tabHistory[0].tabWindowId]) {
+        if (!closedWindows[tabHistory[0].tabWindowId]) closedWindowCount++
+        if (!closedWindows[tabHistory[0].tabWindowId]) closedWindows[tabHistory[0].tabWindowId] = {}
+        closedWindows[tabHistory[0].tabWindowId][tabid] = { open: false, tabDetails: null, tabHistory }
+      } else {
+        if (!openWindows[tabHistory[0].tabWindowId][tabid]) openWindows[tabHistory[0].tabWindowId][tabid] = { open: false, tabDetails: null }
+        openWindows[tabHistory[0].tabWindowId][tabid].tabHistory = tabHistory 
+      }
+    }
+    vState.tabs = [openWindows, closedWindows ]
+    console.log('tabs', { openWindows, closedWindows })
 
     // iterate open and closed tab
-    const tabTypes = ['closedTabs'] //  ['openTabs', 'closedTabs'] // 
-    tabTypes.forEach(tabStatus => {
-      const windowTabs = items[tabStatus]
-      if (windowTabs) {
-        for (const [windowId, tabLogs] of Object.entries(windowTabs)) {
-          for (const [tabId, logList] of Object.entries(tabLogs)) {
-            // make sure duplicates are removed
-            // const tabDiv = dg.div({ style: { border: '1px red solid', height: '150px' } })
-            const tabDiv = lister.emptyFlexBox()
-            tabDiv.style.border = '1px red solid'
-            for (let i = logList.length - 1; i >= 0; i--) {
-              const alog = logList[i]
-              if (alog.purl) {
-                const theLogDiv = lister.drawlogItem(alog, vState, { tabtype: list })
-                theLogDiv.style.width = (i > 0 ? '5px' : '200px')
-                theLogDiv.firstChild.style.background = (i > 0 ? 'grey' : 'white')
-                if (i < logList.length - 1) theLogDiv.setAttribute('vCollapsible', true)
-                tabDiv.appendChild(theLogDiv)
-              } else {
-                console.warn('got log item in tabs with no prul', { alog })
-              }
-            }
-            outer.appendChild(tabDiv)
+    const windowTypes = [openWindows, closedWindows] //  ['openTabs', 'closedTabs'] // 
+    let typeCounter = 0
+    let windowCounter = 0
+    let itemCounter = 1
+    mainDiv.firstChild.style.display = 'none'
+    windowTypes.forEach(windowType => {
+      typeCounter++
+      const titleDiv = dg.h2({
+        style: { cursor: (typeCounter > 1 ? 'pointer' : ''), color : (typeCounter > 1 ? 'cornflowerblue' : 'white'), margin: '20px 0px 0px 10px' },
+        onclick: typeCounter === 1 ? null : function (e) {
+          e.target.style.display = 'none'
+          let current = e.target
+          while (current.nextSibling) {
+            current.nextSibling.style.display = 'block'
+            current = current.nextSibling
           }
-          const seprator = dg.div({ style: lister.endCard.endCardStyle }, ' ')
-          seprator.style.display = 'block'
-          outer.appendChild(seprator)
+          // e.target.nextSibling.style.display = 'block'
         }
+      }, (typeCounter === 1 || isEmpty(windowType)) ? '' : ('Show ' + closedWindowCount + ' Closed Windows'))
+      if (typeCounter !== 1) titleDiv.setAttribute('closedWindowTitle', true)
+      mainDiv.appendChild(titleDiv)
+      for (let [windowId, tabObjects] of Object.entries(windowType)) {
+        const isIncognito = incognitoWindowIds.indexOf(parseInt(windowId)) > -1
+        const windowOuter = dg.div({ style: { padding: '0px', 'border-radius': '20px', background: 'rgb(10 150 100)', margin: '10px', border: '1px solid white' } })
+        if (typeCounter > 1) windowOuter.style.display = 'none'
+        const windowTitle = dg.h3({ style: { padding: '0px 0px 0px 20px', color: (isIncognito ? 'black' : 'white')  } }, (typeCounter === 1 ? '' : 'Closed ') + (isIncognito ? ' Incognito ' : '') + 'Window ' + ++windowCounter)
+        windowOuter.append(windowTitle)
+        const openTabsOuter = lister.emptyFlexBox()
+        const drawtabHistory = function (tabObject, tabIsOpen, windowIsOpen) {
+          const tabDiv = lister.emptyFlexBox()
+          if (tabObject.tabHistory.length === 0) {
+            const domainApp = tabObject.tabDetails.url.indexOf('http') === 0 ? domainAppFromUrl(tabObject.tabDetails.url) : tabObject.tabDetails.url.split(':')[0] // for 'file' or 'chrome'
+            tabObject.tabHistory = [{
+              purl: tabObject.tabDetails.url,
+              domainApp,
+              vSearchString: resetVulogKeyWords({ url: tabObject.tabDetails.url }),
+              _date_modified: tabObject.tabDetails.lastAccessed,
+              tabid: tabObject.tabDetails.id,
+              title: tabObject.tabDetails.title || domainApp,
+              vulog_favIconUrl: tabObject.tabDetails.favIconUrl,
+              tabWindowId: tabObject.tabDetails.windowId
+            }]
+          }
+          const drawnTabUrls = [ tabObject.tabHistory[0].purl ]
+          tabObject.tabHistory.reverse().forEach((logItem, i) => {
+            if (drawnTabUrls.indexOf(logItem.purl) < 0 || i === tabObject.tabHistory.length - 1) { 
+              drawnTabUrls.push(logItem.purl)
+              logItem.fj_local_temp_unique_id = itemCounter++
+              const isCurrentOpenCard = ((i === tabObject.tabHistory.length - 1) && tabIsOpen)
+              const theLogDiv = lister.drawTabItem(logItem, { tabDetails: tabObject.tabDetails, tabIsOpen, isCurrentOpenCard, windowIsOpen }) 
+              theLogDiv.firstChild.style.background = (isCurrentOpenCard ? 'white' : 'lightgrey')
+              if (i < tabObject.tabHistory.length - 1) {
+                theLogDiv.setAttribute('vCollapsible', true)
+                //theLogDiv.firstChild.style.transform = 'rotateY(90deg)'      
+              }
+              tabDiv.appendChild(theLogDiv)
+            } else { /* tab is already drawn */}
+          })
+          const outer = dg.div({ className: 'tabOuter', style: { padding: '10px' /*, border: '1px solid red' */ }})
+
+          if (tabIsOpen) {
+            outer.appendChild(dg.div(
+              { style: { 'text-align': 'right', 'margin-right': '40px', 'min-height': '16px'}},
+                dg.div({ className: 'muteCloseHolder'},   
+                  dg.span({
+                    className:'muteButton', 
+                    style: { display: (tabObject.tabDetails?.audible && !tabObject.tabDetails?.mutedInfo?.muted ? '': 'none'), background: 'white', 'margin-right': '5px', 'border-radius': '5px', padding: '5px', cursor: 'pointer', color: 'mediumpurple' },
+                    onclick: (e) => {
+                      chrome.tabs.update(tabObject.tabDetails?.id, { muted: true }, function() { })
+                      const muteButton = getParentWithClass(e.target, 'muteButton')
+                      muteButton.style.display = 'none'
+                    }
+                  },
+                  dg.span('Mute'),
+                  dg.span({ className: 'fa fa-volume-off', style: { width: '15px', 'font-size': '15px' } }),
+                  dg.span({ className: 'fa fa-times', style: { width: '10px', 'font-size': '10px', 'vertical-align': 'top', 'margin-top': '3px'} })
+                  ),
+                  dg.span({
+                  style: { background: 'white', 'border-radius': '5px', padding: '5px', cursor: 'pointer', color: 'indianred' },
+                  onclick: (e) => {
+                    chrome.tabs.remove(tabObject.tabDetails?.id, function() {
+                      const theDiv = getParentWithClass(e.target, 'tabOuter')
+                      Array.from(theDiv.firstChild.nextSibling.childNodes).forEach(child => {
+                        child.style.transform = 'rotateX(90deg)'
+                      })
+                      setTimeout(() => {theDiv.remove() }, 400); 
+                      windowType[tabObject.tabDetails?.windowId][tabObject.tabDetails?.id].open = false
+                      
+                      const closedTabsOuter = document.querySelector('[closedTabListForWindow="' + tabObject.tabDetails?.windowId + '"]')
+                      closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1))) 
+                      // nb if this is the last window should remove the window and add it to closed windows secion, ut igneod that for the moment
+                      })
+                    // chrome.tabs.remove(tab.id, function() { })
+                    // theDiv.style.display = 'none'
+                    // remove from db
+                  }
+                }, 
+                dg.span('Close'),
+                dg.span({ className: 'fa fa-times', style: { width: '20px'} })
+            ))))
+            outer.appendChild(dg.div({ style: { 'min-width': '2px'}}))
+          }
+          outer.append(tabDiv)
+          return outer
+        }
+        const closedTabList = []
+        const openTabsList = []
+        for (let [tabId, tabObject] of Object.entries(tabObjects)) {
+          if (!tabObject.open) {
+            tabObject.tabDetails = { windowId: parseInt(windowId) }
+            closedTabList.push(tabObject)
+          } else {
+            openTabsList.push(tabObject)
+          }
+        }
+        openTabsList.sort((a, b) => { return a.tabDetails.index < b.tabDetails.index ? -1 : 1 })
+        openTabsList.forEach(tabObject => 
+          openTabsOuter.appendChild(drawtabHistory(tabObject, true, true))
+        )
+        windowOuter.appendChild(openTabsOuter)
+
+        const closedTabsOuter = lister.emptyFlexBox()
+        if (closedTabList && closedTabList.length > 0) {
+          const titleDiv = dg.div({
+            style: { 'padding': '20px', 'font-size': '12px', color: 'blue  ', cursor: 'pointer', display: (typeCounter === 1 ? 'block' : 'none') },
+            onclick: function (e) {
+              e.target.style.display = 'none'
+              e.target.nextSibling.style.display = 'flex'
+              // expandSection(e.target.nextSibling)
+            }
+          }, 'See ' + closedTabList.length + ' Closed Tabs')
+          if (typeCounter === 1) titleDiv.setAttribute('closedTabTitle', true)
+          windowOuter.appendChild(titleDiv) 
+
+          closedTabsOuter.setAttribute('closedTabListForWindow', windowId)
+          closedTabsOuter.style['border-top'] = '1px solid white'
+          closedTabsOuter.style.display = (typeCounter > 1 ? 'flex' : 'none')
+          // closedTabsOuter.style.height = '0'
+          closedTabList.forEach(tabObject => 
+            closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1)))
+          )
+        }
+        windowOuter.appendChild(closedTabsOuter)
+
+   // use openerTabId as a way of finding referrer!
+   // 
+        mainDiv.appendChild(windowOuter)
       }
     })
-    lister.endCard.showNoMore()
   }
+}
+const tabRecordByPurl = function (purl) {
+  let logToreturn = null
+  vState.tabs.forEach(windowType => {
+    for (let [windowId, tabObjects] of Object.entries(windowType)) {
+      for (let [tabId, tabObject] of Object.entries(tabObjects)) {
+        tabObject.tabHistory.forEach((logItem, i) => {
+          if (logItem.purl === purl) logToreturn = logItem
+          if (logItem.purl === purl) return logItem
+        })
+      }
+    }
+  })
+  return logToreturn
+}
+const drawBoxAroundTabCards = function (cardDiv) {
+  cardDiv.parentElement.parentElement.parentElement.style.border = '2px solid white'
+  cardDiv.parentElement.parentElement.parentElement.style.background = 'rgb(10, 120, 70)' // 'rgb(121, 172, 18)'
+  cardDiv.parentElement.parentElement.parentElement.style['border-radius'] = '15px'
 }
 
 // draw marks and logs
@@ -379,6 +549,11 @@ lister.dims = {
     width: 200,
     height: 200
   },
+  tabs: {
+    width: 200,
+    widthForCollpasing: 200,
+    height: 190
+  },
   messages: {
     width: 200,
     height: 360
@@ -388,7 +563,7 @@ lister.dims = {
     height: null
   }
 }
-lister.drawmarkItem = function (markOnMark, vState, opt = {}) {
+lister.drawmarkItem = function (markOnMark, opt = {}) {
   const { tabtype, expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -399,7 +574,7 @@ lister.drawmarkItem = function (markOnMark, vState, opt = {}) {
   itemdiv.setAttribute('purl', markOnMark.purl)
   itemdiv.className = 'cardOuter'
 
-  const minMax = lister.minMaximizeButt(lister.idFromMark(markOnMark), vState)
+  const minMax = lister.minMaximizeButt(lister.idFromMark(markOnMark))
   lister.minMaximizeButtSet(minMax, true)
   itemdiv.appendChild(minMax)
 
@@ -422,7 +597,7 @@ lister.drawmarkItem = function (markOnMark, vState, opt = {}) {
   })
   itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center' } }, stars))
 
-  itemdiv.appendChild(lister.imageBox(markOnMark.image))
+  itemdiv.appendChild(lister.imageBox(markOnMark.image, null, titleInner))
 
   const summaryOuter = dg.div({ className: 'summarySharingAndHighlights' })
   summaryOuter.appendChild(lister.summarySharingAndHighlights(markOnMark))
@@ -473,7 +648,7 @@ lister.summarySharingAndHighlights = function (markOnMark) {
     const highlightSum = dg.div({ style: { overflow: 'hidden', color: '#057d47', 'padding-top': '3px' } },
       dg.div((markOnMark.vHighlights.length + ' highlights'),
         dg.div({ style: { overflow: 'hidden', 'text-overflow': 'ellipsis', height: '18px', 'margin-bottom': '-5px' } }, 'Click to see')))
-    highlightSum.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark), vState) }
+    highlightSum.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark)) }
     summarySharingAndHighlights.appendChild(highlightSum)
   } else {
     summarySharingAndHighlights.appendChild(dg.div(dg.div()))
@@ -482,7 +657,7 @@ lister.summarySharingAndHighlights = function (markOnMark) {
   const sharingSpan = vState.isLoggedIn ? lister.allPeopleSharedWith(markOnMark) : dg.span('Expand for details')
   const sharingButt = dg.div(
     { style: { 'text-align': 'center', color: 'purple', height: '32px', overflow: 'hidden', padding: '2px 5px 2px 5px' } }, sharingSpan)
-  sharingButt.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark), vState) }
+  sharingButt.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark)) }
     // : function () { window.open('logInPage', '_self') }
   summarySharingAndHighlights.appendChild(sharingButt)
   return summarySharingAndHighlights
@@ -539,7 +714,7 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
     titleGrid.appendChild(dg.div({ style: { 'max-height': (hasHighlights ? '100px' : null), overflow: 'hidden', 'text-overflow': 'ellipsis', color: 'darkgrey' } }, markOnMark.description))
   }
   if (hasImg) {
-    const imgBox = lister.imageBox(markOnMark.image, { 'border-radius': '20px', 'margin-top': '0px', 'max-height': '95px', 'max-width': '100%' })
+    const imgBox = lister.imageBox(markOnMark.image, { 'border-radius': '20px', 'margin-top': '0px', 'max-height': '95px', 'max-width': '100%' }, titleInner)
     imgBox.style['max-height'] = '100px'
     imgBox.style.height = '100px'
     imgBox.style.padding = '0px 5px'
@@ -555,7 +730,8 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
 
     //  display: 'block', 'text-align': 'right', padding: '5px 0px', width: '100%',
     const openWithVulog = dg.a({ style: { float: 'right', 'font-size': 'small', 'font-weight': 'normal' } }, 'Open with hiper.cards')
-    openWithVulog.setAttribute('href', '/' + markOnMark._id + '?hipercardsredirect=true')
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') +  '/' + markOnMark._id + '?vulogredirect=true'
+    openWithVulog.setAttribute('href', href)
     openWithVulog.setAttribute('target', '_blank')
     titleOuter.firstChild.appendChild(openWithVulog)
 
@@ -581,7 +757,7 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
 
   return lister.addCard2ndOuter(itemdiv, 'publicmarks')
 }
-lister.drawlogItem = function (logItem, vState, opt = {}) {
+lister.drawlogItem = function (logItem, opt = {}) {
   const { tabtype, expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -593,7 +769,7 @@ lister.drawlogItem = function (logItem, vState, opt = {}) {
   if (tabtype) itemdiv.setAttribute('tabtype', tabtype)
   itemdiv.className = 'cardOuter'
 
-  const minMax = lister.minMaximizeButt(lister.idFromMark(logItem), vState)
+  const minMax = lister.minMaximizeButt(lister.idFromMark(logItem))
   lister.minMaximizeButtSet(minMax, true)
   itemdiv.appendChild(minMax)
 
@@ -631,9 +807,9 @@ lister.drawlogItem = function (logItem, vState, opt = {}) {
   }, timeAndScrollString(logItem)))
 
   // image
-  const imageBox = lister.imageBox(logItem.image)
+  const imageBox = lister.imageBox(logItem.image, null, titleInner)
   imageBox.firstChild.style.padding = '0px 5px 5px 5px'
-  imageBox.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem), vState) }
+  imageBox.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
   itemdiv.appendChild(imageBox)
 
   itemdiv.appendChild(dg.div({
@@ -656,7 +832,7 @@ lister.drawlogItem = function (logItem, vState, opt = {}) {
   })
   itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center', display: (expandedView ? 'block' : 'none') } }, stars))
   const smallStars = overlayUtils.drawSmallStars(markFromLog)
-  smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem), vState) }
+  smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
   smallStars.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, 'Share'))
   itemdiv.appendChild(dg.div({ className: 'smallStarsOnCard', style: { 'text-align': 'center', height: '15px', display: (expandedView ? 'none' : 'block') } }, smallStars))
 
@@ -703,6 +879,141 @@ lister.drawlogItem = function (logItem, vState, opt = {}) {
 
   return lister.addCard2ndOuter(itemdiv, 'history')
 }
+lister.drawTabItem = function (logItem, opt = {}) {
+  const { expandedView, fromAutoUpdate, tabDetails, isCurrentOpenCard, tabIsOpen, windowIsOpen } = opt
+  const itemdiv = fromAutoUpdate
+    ? dg.div()
+    : lister.cardOuter(logItem, 'tabs', expandedView)
+
+  itemdiv.setAttribute('vulogId', lister.idFromMark(logItem))
+  itemdiv.setAttribute('purl', logItem.purl)
+  if (expandedView) itemdiv.setAttribute('expandedView', (expandedView))
+  itemdiv.className = 'cardOuter'
+
+  const showHideCloseMuteAndExpand = async function (e) {
+    await lister.setItemExpandedStatus(lister.idFromMark(logItem))
+    const cardOuter = getParentWithClass(e.target, 'cardOuter')
+    drawBoxAroundTabCards(cardOuter)
+    if (tabIsOpen && isCurrentOpenCard) {
+      const expandedView = cardOuter.getAttribute('expandedView') === 'true'
+      const tabOuter = getParentWithClass(e.target, 'tabOuter')
+      tabOuter.firstChild.firstChild.style.display = expandedView ? 'none' : 'block'
+    }
+  }
+
+  const minMax = lister.minMaximizeButt(lister.idFromMark(logItem))
+  lister.minMaximizeButtSet(minMax, true)
+  minMax.onclick = showHideCloseMuteAndExpand
+  itemdiv.appendChild(minMax)
+
+  itemdiv.appendChild(lister.domainSpanWIthRef(logItem, expandedView))
+ 
+  let urlText = (logItem.title || (logItem.purl.replace(/\//g, ' ')))
+  if (urlText.indexOf('chrome-extension') === 0 || urlText.indexOf('http') === 0) {
+    const oldUrl = urlText
+    urlText = ''
+    for (let i = 0; i < oldUrl.length; i++) {
+      urlText += (oldUrl.charAt(i) + '&#8203')
+    }
+  }
+  if (!logItem.purl) console.warn('No purl is logItem', { logItem })
+  const titleOuter = lister.titleOuter(expandedView)
+  const goToOrOpenTab = function () {
+    if (tabIsOpen && isCurrentOpenCard) {
+      // chrome.tabs.update(logItem.tabid, { active: true })
+      // chrome.windows.update(logItem.tabWindowId, { focused: true })
+      chrome.windows.update(tabDetails.windowId, {focused: true}, (window) => {
+        chrome.tabs.update(tabDetails.id, {active: true})
+      })
+    } else if (parseInt(itemdiv.parentElement.style.marginRight) < 0){
+      // do nothing as card is collapsed
+    } else if (!windowIsOpen) {
+      window.open(logItem.url, '_blank')
+    } else {
+      chrome.tabs.create({
+        url: logItem.url,
+        active: true,
+        windowId: tabDetails.windowId
+      }, function (newInfo) {
+        chrome.windows.update(tabDetails.windowId, {focused: true}, (window) => {
+          chrome.tabs.update(newInfo.id, {active: true})
+        })
+      })
+    }
+  }
+  const titleInner = dg.a({ onclick: goToOrOpenTab, style: { overflow: 'hidden', 'text-decoration': 'none', cursor: 'pointer' } })
+  titleInner.innerHTML = urlText
+  titleOuter.appendChild(dg.div({
+    className: 'fa fa-external-link',
+    style: { float: 'right', color: 'cornflowerblue', 'font-size': '18px', margin: '6px 0px 0px 5px', cursor: 'pointer' },
+    onclick: goToOrOpenTab
+  }))
+  titleOuter.appendChild(titleInner)
+
+  itemdiv.appendChild(titleOuter)
+
+  // image
+  const imageBox = lister.imageBox(logItem.image, null, titleInner)
+  imageBox.firstChild.style.padding = '0px 5px 5px 5px'
+  // imageBox.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
+  itemdiv.appendChild(imageBox)
+
+  const markFromLog = (logItem?.purl && vState.logs?.lookups) ? vState.logs?.lookups[logItem.purl] : null // note this doesnt necessarily capture all marks, only recent ones...
+  const stars = overlayUtils.drawstars(markFromLog || logItem, {
+    drawTrash: false,
+    showBookmark: true,
+    markOnBackEnd: vState.markOnBackEnd,
+    logToConvert: logItem
+  })
+  itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center', margin: '5px 100px', 'background-color': 'white', 'border-radius': '10px', 'padding-top': '5px', display: (expandedView ? 'block' : 'none') } }, stars))
+  const smallStars = overlayUtils.drawSmallStars(markFromLog)
+  smallStars.onclick = showHideCloseMuteAndExpand
+  itemdiv.appendChild(dg.div({ className: 'smallStarsOnCard', style: { 'text-align': 'center', background: 'white', 'border-radius': '3px', padding: '2px', margin: '2px 20px', height: '15px', display: (expandedView ? 'none' : 'block') } }, smallStars))
+
+  const notesBox = overlayUtils.drawMainNotesBox(markFromLog, { mainNoteSaver: vState.mainNoteSaver, log: logItem })
+  itemdiv.appendChild(dg.div({ className: 'vNote', style: { display: (expandedView ? 'block' : 'none') } }, notesBox))
+
+  itemdiv.appendChild(
+    dg.div({
+      style: {
+        display: 'none',
+        height: '17px',
+        'text-overflow': 'ellipsis',
+        'white-space': 'nowrap',
+        'vertical-align': 'bottom',
+        color: MCSS.DARK_GREY
+      },
+      className: 'viaReferrer'
+    },
+    (logItem?.referrer?.trim() ? (dg.span(' via ', dg.a({ href: logItem.referrer, style: { color: 'grey' } }, logItem.referrer))) : ' ')
+    ))
+
+  if (logItem.vCreated || logItem.fj_modified_locally) {
+    const dateToUse = new Date(logItem.vCreated || logItem.fj_modified_locally)
+    const weekday = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
+    const dateString = weekday[dateToUse.getDay()] + ' ' + (dateToUse.toLocaleDateString() + ' ' + dateToUse.toLocaleTimeString()) // + ' ' + dateToUse
+    itemdiv.appendChild(dg.div({ className: 'dateString', style: { color: 'indianred', 'margin-top': '5px' } }, dateString))
+  }
+
+  const hLightOptions = {
+    type: 'markHighlights',
+    purl: logItem.purl,
+    markOnBackEnd: vState.markOnBackEnd,
+    markOnMarks: markFromLog,
+    logToConvert: logItem,
+    hLightCommentSaver: vState.hLightCommentSaver,
+    hLightDeleter: vState.hLightDeleter
+  }
+  itemdiv.appendChild(lister.newDrawHighlights(logItem.purl, markFromLog?.vHighlights, hLightOptions)) //
+  itemdiv.appendChild(overlayUtils.areaTitle('Sharing', { display: 'none' }))
+  itemdiv.appendChild(lister.sharingDetailsSkeleton(logItem.purl))
+  itemdiv.appendChild(overlayUtils.vMessageCommentDetails(logItem.purl, []))
+  const msgHighLightoptions = JSON.parse(JSON.stringify(hLightOptions))
+  msgHighLightoptions.type = 'msgHighLights'
+  itemdiv.appendChild(lister.newDrawHighlights(logItem.purl, [], msgHighLightoptions)) //
+
+  return lister.addCard2ndOuter(itemdiv, 'tabs')
+}
 lister.drawMessageItem = function (msgRecord, opt = {}) {
   const { expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
@@ -721,7 +1032,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
   itemdiv.setAttribute('purl', msgRecord.purl)
   itemdiv.className = 'cardOuter'
 
-  const minMax = lister.minMaximizeButt(lister.idFromMark(msgRecord), vState)
+  const minMax = lister.minMaximizeButt(lister.idFromMark(msgRecord))
   lister.minMaximizeButtSet(minMax, true)
   itemdiv.appendChild(minMax)
 
@@ -736,7 +1047,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
 
   itemdiv.appendChild(titleOuter)
 
-  itemdiv.appendChild(lister.imageBox(msgRecord.image))
+  itemdiv.appendChild(lister.imageBox(msgRecord.image, null, titleInner))
 
   const markOnMarks = vState.marks.lookups[msgRecord.purl]
 
@@ -749,8 +1060,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
   itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center', display: (expandedView ? 'block' : 'none') } }, stars))
 
   const smallStars = overlayUtils.drawSmallStars(markOnMarks)
-  // smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(msgRecord), vState) }
-  smallStars.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, 'Share'))
+  smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(msgRecord)) }
   itemdiv.appendChild(dg.div({ className: 'smallStarsOnCard', style: { 'text-align': 'center', height: '15px', display: (expandedView ? 'none' : 'block') } }, smallStars))
 
   const notesBox = overlayUtils.drawMainNotesBox(markOnMarks, { mainNoteSaver: vState.mainNoteSaver, log: msgRecord })
@@ -785,7 +1095,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
 }
 
 // Expanding card
-lister.setItemExpandedStatus = async function (id, vState) {
+lister.setItemExpandedStatus = async function (id) {
   if (vState.viewType === 'fullHeight') console.error('setexpanded view cannot be used with fullheight')
   const theDiv = dg.el(id)
   const expandedView = theDiv.getAttribute('expandedView') === 'true'
@@ -804,8 +1114,9 @@ lister.setItemExpandedStatus = async function (id, vState) {
   }
   const titleOuter = theDiv.querySelector('.vulog_title_url')
   titleOuter.style.height = doExpand ? null : '33px'
-  const smallStarsOnCard = theDiv.querySelector('.smallStarsOnCard')
+  const smallStarsOnCard = theDiv.querySelector('.smallStarsOnCard') 
   if (smallStarsOnCard) smallStarsOnCard.style.display = doExpand ? 'block' : 'none'
+
 
   const divLeft = theDiv.getClientRects()[0].left
   const screenWidth = document.body.getClientRects()[0].width
@@ -834,10 +1145,11 @@ lister.setItemExpandedStatus = async function (id, vState) {
   if (doExpand) {
     if (trash) trash.style.display = 'block'
     if (trash) trash.parentElement.style['padding-right'] = '40px'
-    theDiv.firstChild.nextSibling.style.background = 'linear-gradient(to bottom, #aae9cc, white 20%, #aae9cc 20%, white 30%, #aae9cc 40%, white 50%, #aae9cc 60%, white 70%, #aae9cc 80%, white 90%)'
+    const color = list === 'tabs' && theDiv.parentElement.getAttribute('vCollapsible') === 'true' ? 'lightgrey' : 'white' 
+    theDiv.firstChild.nextSibling.style.background = 'linear-gradient(to bottom, #aae9cc, ' + color + ' 20%, #aae9cc 20%, ' + color + ' 30%, #aae9cc 40%, ' + color + ' 50%, #aae9cc 60%, ' + color + ' 70%, #aae9cc 80%, ' + color + ' 90%)'
     theDiv.firstChild.nextSibling.style.cursor = 'grab'
     theDiv.firstChild.nextSibling.id = theDiv.id + 'header'
-    lister.dragElement(theDiv, vState)
+    lister.dragElement(theDiv)
   } else {
     if (trash) trash.style.display = 'none'
     if (trash) trash.parentElement.style['padding-right'] = null
@@ -883,9 +1195,11 @@ lister.setItemExpandedStatus = async function (id, vState) {
 
     const mark = vState.marks?.lookups[purl]
     const msgRecord = vState.messages?.lookups ? vState.messages.lookups[purl] : null
-    const log = (list === 'history') ? (vState.history.unfilteredItems.find(m => m.purl === purl) || vState.history.filteredItems.find(m => m.purl === purl)) : null
+    const log = (list === 'history')
+      ? (vState.history.unfilteredItems.find(m => m.purl === purl) || vState.history.filteredItems.find(m => m.purl === purl))
+      : (list === 'tabs') ? tabRecordByPurl(purl) : null
 
-    const logOrMsgToDraw = mark || (list === 'history' ? convertLogToMark(log) : convertLogToMark(msgRecord))
+    const logOrMsgToDraw = mark || ((list === 'history' || list === 'tabs') ? convertLogToMark(log) : convertLogToMark(msgRecord))
 
     const stars = overlayUtils.drawstars(logOrMsgToDraw, {
       drawTrash: (list === 'marks'),
@@ -897,7 +1211,7 @@ lister.setItemExpandedStatus = async function (id, vState) {
     const starDiv = theDiv.querySelector('.starsOnCard')
     starDiv.innerHTML = ''
     starDiv.appendChild(stars)
-    starDiv.style['margin-right'] = '40px'
+    if (list !== 'tabs') starDiv.style['margin-right'] = '40px'
     const trash = starDiv.querySelector('.vulog_overlay_trash')
     if (trash) trash.style.display = 'block'
     const summarySharingAndHighlights = theDiv.querySelector('.summarySharingAndHighlights')
@@ -932,7 +1246,7 @@ lister.setItemExpandedStatus = async function (id, vState) {
 
     // DO HIGLIGHTS AND DO SHARING
   } else {
-    theDiv.querySelector('.starsOnCard').style['margin-right'] = '0'
+    if (list !== 'tabs') theDiv.querySelector('.starsOnCard').style['margin-right'] = '0'
   }
   if (!vState.messages) vState.messages = {}
   if (!vState.messages.unfilteredItems) vState.messages.unfilteredItems = []
@@ -1019,7 +1333,7 @@ const refreshSharedMarksinVstateFor = async function (purl) {
 lister.addCard2ndOuter = function (cardOuter, list) {
   return dg.div({
     style: {
-      margin: '15px', width: (lister.dims[list].width + 'px'), transition: 'all 0.5s ease-out'
+      margin: (list === 'tabs' ? '0' : '15px'), width: (lister.dims[list].width + 'px'), transition: 'all 0.5s ease-out'
     }
   }, cardOuter)
 }
@@ -1055,7 +1369,15 @@ lister.domainSpanWIthRef = function (markOrLog, expandedView) {
     }
   }, lister.domainSpanWIthRefInner(markOrLog, expandedView))
 }
-lister.imageBox = function (image, styles) {
+lister.imageBox = function (image, styles, aElement) {
+  // nb not tested
+  if (image && image.indexOf('http') !== 0) {
+    if (aElement && image.indexOf('/') === 0) {
+      image = 'https//' + aElement?.hostname + '/' + image
+    } else {
+      image = ''
+    }
+  } 
   const imageBox = dg.div({ style: { 'text-align': 'center', height: '80px', padding: '5px' } }, //
     (image
       ? dg.img({ src: (image || ''), style: { 'max-width': '170px', 'max-height': '80px' } })
@@ -1175,11 +1497,10 @@ lister.openOutside = function (url, options) {
 }
 lister.newDrawHighlights = function (purl, hLights, options) {
   // options: hLightCommentSaver, hLightDeleter, existingDiv, markOnBackEnd, markOnMarks, logToConvert (eg msgRecord)
-  // onsole.log('newDrawHighlights drawHighlight', { purl, hLights })
   if (options?.existingDiv) options.existingDiv.innerHTML = ''
   const innerHighs = options?.existingDiv || dg.div({ className: options.type, style: { display: 'none' } })
   if (hLights && hLights.length > 0) {
-    const title = (options?.type === 'msgHighLights' ? 'Highlights in Messages' : 'Your Highlights')
+    const title = (options?.type === 'msgHighLights' ? 'Highlights in Messages 1' : 'Your Highlights')
     innerHighs.appendChild(overlayUtils.areaTitle('Highlights', { display: 'block', title, color: (options?.type === 'msgHighLights' ? 'purple' : '#057d47') }))
 
     const hLightOpts = JSON.parse(JSON.stringify(options))
@@ -1420,7 +1741,7 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
 
   if (!perms.isLoggedIn) {
     outer.appendChild(dg.span({ style: { color: 'darkgrey' } }, 'Connect to a freezr server to be able to share your bookmarks, notes and highlights. '))
-    outer.appendChild(dg.a({ href: 'https://freezr.info' }, 'Cleck here to find out more about setting up a freezr server.'))
+    outer.appendChild(dg.a({ href: 'https://www.freezr.info' }, 'Cleck here to find out more about setting up a freezr server.'))
     outer.appendChild(dg.div(dg.br(), dg.div({ style: { 'color': 'grey' } }, dg.span('If you already have a feezr server, log in '), dg.a({ href: '/main/settings.html' }, 'on the setting page.'))))
     return outer
   }
@@ -1430,10 +1751,11 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
   // Public Summary
   const publicMark = getPublicMark(purl)
   const publicUrl = getPublicUrl(publicMark)
+  const hrefCore = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission')))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: hrefCore +'/account/app/settings/cards.hiper.freezr' }, 'the link_share permission')))
   } else if (publicMark) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span(('Your bookmark was published.'), dg.a({ href: '/' + publicUrl }, 'You can find it here.'), dg.span(' Press the Public button for more options.'))))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span(('Your bookmark was published.'), dg.a({ href: hrefCore + '/' + publicUrl }, 'You can find it here.'), dg.span(' Press the Public button for more options.'))))
   } else {
     outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), 'Press on the Public button to publish this bookmark. '))
   }
@@ -1443,9 +1765,9 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
   const privateUrl = getPrivateUrl(privateMark)
   outer.appendChild(dg.br())
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span('You can create a private link, protected b a code, to your bookmark by granting '), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission.')))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span('You can create a private link, protected b a code, to your bookmark by granting '), dg.a({ href: hrefCore + '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission.')))
   } else if (privateMark) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span(('A private link has been created for your bookmark.'), dg.a({ href: '/' + privateUrl }, 'You can find it here.'), dg.span(' Press the Private button for more options.'))))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span(('A private link has been created for your bookmark.'), dg.a({ href: hrefCore + '/' + privateUrl }, 'You can find it here.'), dg.span(' Press the Private button for more options.'))))
   } else {
     outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), 'Press on the Private button to create a private link to this bookmark - this will be a publicly accessible url oritected b a simple code.. '))
   }
@@ -1480,7 +1802,8 @@ drawSharingSubsection._public = function (purl, options) {
   outer.setAttribute('shareType', '_public')
 
   if (!perms.havePublicPerm) {
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant the link_share permission.')))
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')  + '/account/app/settings/cards.hiper.freezr'
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -1639,9 +1962,11 @@ drawSharingSubsection._privatelink = function (purl, options) {
   const outer = options?.existingDiv || collapsibleDiv('sharingArea_privatelink')
   outer.innerHTML = ''
   outer.setAttribute('shareType', '_privatelink')
+  const hrefCore = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')
 
   if (!perms.havePublicPerm) {
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant the link_share permission.')))
+    const href = hrefCore +  '/account/app/settings/cards.hiper.freezr'
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -1666,7 +1991,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
     messageBox.style['max-height'] = 'none'
 
     if (privateUrl) {
-      outer.appendChild(dg.div(dg.span(('You created a private link to this bookmark on ' + new Date(publishDate).toLocaleDateString() + '.'), dg.span(' You can find it '), dg.a({ href: '/' + privateUrl }, 'here.'), dg.span(' You can republish the current mark below, or delete it.'))))
+      outer.appendChild(dg.div(dg.span(('You created a private link to this bookmark on ' + new Date(publishDate).toLocaleDateString() + '.'), dg.span(' You can find it '), dg.a({ href: hrefCore + '/' + privateUrl }, 'here.'), dg.span(' You can republish the current mark below, or delete it.'))))
       outer.appendChild(messageBox)
     } else {
       outer.appendChild(dg.div(dg.span(('There seems to have been issues. A private link was created on ' + new Date(privateMark._date_modified).toLocaleDateString() + ', but it seems the operation was incompete.'), dg.span(' You can republish the current mark below, or delete it to retry.'))))
@@ -1735,7 +2060,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
     outer.appendChild(buttons)
     // add spinners and padding
   } else {
-    outer.appendChild(dg.div('You can create a private link to this bookmark so you can share a link with your contacts without forcing them to sign up for hiper.cards. Your highlights and initial hilight comments will also be shared.'))
+    outer.appendChild(dg.div('You can create a private link to this bookmark so you can share a link with your contacts without forcing them to sign up for vulog. Your highlights and initial hilight comments will also be shared.'))
     const messageBox = overlayUtils.editableBox({
       placeHolderText: 'Enter notes on the page'
     }, async function (e) {
@@ -1766,7 +2091,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
             const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             vState.sharedmarks.lookups[purl].push(createRet)
             outer.innerHTML = ''
-            outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('You created a shared bookmark.'), dg.a({ href: ('/' + shareRet._publicid + '?code=' + shareRet.code) }, 'Access it here.')))
+            outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('You created a shared bookmark.'), dg.a({ href: (hrefCore + '/' + shareRet._publicid + '?code=' + shareRet.code) }, 'Access it here.')))
             await refreshSharedMarksinVstateFor(purl)
             outer.setAttribute('vStateChanged', 'true')
             return shareRet
@@ -1791,7 +2116,8 @@ drawSharingSubsection._privatefeed = function (purl, options) {
   outer.setAttribute('shareType', '_privatefeed')
 
   if (!perms.havePublicPerm || !perms.haveFeedPerm) {
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant the link_share permission.')))
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') +  '/account/app/settings/cards.hiper.freezr'
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -1799,7 +2125,11 @@ drawSharingSubsection._privatefeed = function (purl, options) {
   // const feedNames = vState.feedcodes.map(f => f.name)
 
   if (!vState.feedcodes || vState.feedcodes.length === 0) {
-    outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: '/account/contacts' }, 'Press here to go to your contacts page anbd press other options..')))
+    if (vState.isExtension) {
+      outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: (vState.freezrMeta?.serverAddress || 'https://freezr.info') + '/account/contacts' }, 'Press here to go to your contacts page and press other options..'), dg.a({ href: '/main/settings.html' }, 'Or if you just created a feed go to settings to sync with your server, or refresh this page..')))
+    } else {
+      outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: '/account/contacts' }, 'Press here to go to your contacts page and press other options..')))
+    }
   } else {
     outer.appendChild(dg.div('You can add specific bookmarks to your private feeds.'))
     vState.feedcodes.forEach(feedCode => {
@@ -1826,9 +2156,10 @@ drawSharingSubsection._privatefeed = function (purl, options) {
 
                 const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
                 vState.sharedmarks.lookups[purl].push(createRet)
-                buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href: ('/ppage?feed=' + feedName + '&code=' + shareRet.code) }, 'feed!')))
+                const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + ('/public?feed=' + feedName + '&code=' + shareRet.privateFeedCode)
+                buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href }, 'feed!')))
                 await refreshSharedMarksinVstateFor(purl)
-                outer.setAttribute('vStateChanged', 'true')
+                outer.setAttribute('vStateChanged', 'true') 
                 return shareRet
               } catch (e) {
                 outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'There was an error posting the link. Please try again.'))
@@ -1917,12 +2248,14 @@ drawSharingSubsection._messages = function (purl, options) {
   if (!perms.haveMessagingPerm || !perms.haveContactsPerm) {
     const innerPerms = dg.span()
     if ((!perms.haveMessagingPerm && perms.haveContactsPerm) || (perms.haveMessagingPerm && !perms.haveContactsPerm)) innerPerms.innerText = 'You have only granted one of the two permissions'
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href: '/account/app/settings/cards.hiper.freezr' }, 'Press here to grant   permissions.')))
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') +  '/account/app/settings/cards.hiper.freezr'
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href }, 'Press here to grant   permissions.')))
     return outer
   }
 
   if (!vState.friends || vState.friends.length === 0) {
-    outer.appendChild(dg.div(dg.span('You have no contacts. ;( ...'), dg.a({ href: '/account/contacts' }, 'Press here to add contacts..')))
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/contacts'
+    outer.appendChild(dg.div(dg.span('You have no contacts. ;( ...'), dg.a({ href }, 'Press here to add contacts..')))
   } else {
     overlayUtils.setUpMessagePurlWip(purl)
 
@@ -1946,7 +2279,7 @@ const getPublicMark = function (purl) {
   return sharedMarksList.find(m => m.isPublic)
 }
 const getPublicUrl = function (publicMark) {
-  if (publicMark?._accessible?._public && publicMark._accessible._public['com_salmanff_vulog/public_link']?.granted) return publicMark._accessible._public['com_salmanff_vulog/public_link'].public_id
+  if (publicMark?._accessible?._public && publicMark._accessible._public['cards_hiper_freezr/public_link']?.granted) return publicMark._accessible._public['cards_hiper_freezr/public_link'].public_id
   return null
 }
 const getPrivateMark = function (purl) {
@@ -1954,13 +2287,13 @@ const getPrivateMark = function (purl) {
   const sharedMarksList = vState.sharedmarks?.lookups ? vState.sharedmarks.lookups[purl] : null
   // takes a list of queried sharedmakrks to see if any are public
   if (!sharedMarksList || sharedMarksList.length === 0) return null
-  return sharedMarksList.find(mark => (!mark.isPublic && mark._accessible?._privatelink && mark._accessible._privatelink['com_salmanff_vulog/public_link']?.granted))
+  return sharedMarksList.find(mark => (!mark.isPublic && mark._accessible?._privatelink && mark._accessible._privatelink['cards_hiper_freezr/public_link']?.granted))
 }
 const getPrivateUrl = function (privateMark) {
-  const grantedAccessible = (privateMark?._accessible?._privatelink && privateMark._accessible._privatelink['com_salmanff_vulog/public_link']?.granted)
+  const grantedAccessible = (privateMark?._accessible?._privatelink && privateMark._accessible._privatelink['cards_hiper_freezr/public_link']?.granted)
   if (!grantedAccessible) return null
 
-  const accessibleObj = privateMark._accessible._privatelink['com_salmanff_vulog/public_link']
+  const accessibleObj = privateMark._accessible._privatelink['cards_hiper_freezr/public_link']
   const code = (accessibleObj.codes && accessibleObj.codes.length > 0) ? accessibleObj.codes[0] : null
   if (!code) return null
   return accessibleObj.public_id + '?code=' + code
@@ -1973,12 +2306,12 @@ const getFeedMark = function (purl, feedName) {
   return sharedMarksList.find(mark => (
     !mark.isPublic &&
     mark._accessible?._privatefeed &&
-    mark._accessible._privatefeed['com_salmanff_vulog/public_link']?.granted &&
-    mark._accessible._privatefeed['com_salmanff_vulog/public_link']?.names.indexOf(feedName) > -1
+    mark._accessible._privatefeed['cards_hiper_freezr/public_link']?.granted &&
+    mark._accessible._privatefeed['cards_hiper_freezr/public_link']?.names.indexOf(feedName) > -1
   ))
 }
 const getPublishDate = function (sharedMark, type) {
-  if (sharedMark?._accessible && sharedMark?._accessible[type] && sharedMark._accessible[type]['com_salmanff_vulog/public_link']?.granted) return sharedMark._accessible[type]['com_salmanff_vulog/public_link']._date_published
+  if (sharedMark?._accessible && sharedMark?._accessible[type] && sharedMark._accessible[type]['cards_hiper_freezr/public_link']?.granted) return sharedMark._accessible[type]['cards_hiper_freezr/public_link']._date_published
   return null
 }
 const getMarkFromVstateList = function (purl, options) {
@@ -2009,10 +2342,10 @@ const errStyle = {
   color: 'red',
   'border-radius': '5px'
 }
-lister.minMaximizeButt = function (id, vState) {
+lister.minMaximizeButt = function (id) {
   const butt = dg.div({ className: 'minMaximizeButt', style: { width: '14px', height: '11px', 'border-radius': '2px', border: '1px solid cornflowerblue', float: 'right', cursor: 'pointer', 'margin-right': '3px' } })
   butt.onclick = async function () {
-    await lister.setItemExpandedStatus(id, vState)
+    await lister.setItemExpandedStatus(id)
     // try {
     // } catch (e) {
     //   console.warn('err in updating ', { e })
@@ -2031,7 +2364,8 @@ lister.minMaximizeButtSet = function (butt, showMax) {
 }
 
 // filtering / pages
-lister.filterItemsInMainDivOrGetMore = async function (vState, source) {
+lister.filterItemsInMainDivOrGetMore = async function (source) {
+  // onsole.log('filterItemsInMainDivOrGetMore')
   const mainDiv = vState.divs.main
   const list = vState.queryParams.list
 
@@ -2048,6 +2382,8 @@ lister.filterItemsInMainDivOrGetMore = async function (vState, source) {
     vState.shownNum = 0
     lister.getQueryParams()
 
+    if (list === 'tabs') return lister.showHideCardsBasedOnFilters.tabs(source) // skip filterItemsInTabs(source)
+
     if (vState[list].filteredItems && vState[list].filteredItems.length > 0) {
       vState[list].filteredItems.forEach(item => {
         const cardDiv = dg.el('vitem_id_' + item._id)
@@ -2062,10 +2398,10 @@ lister.filterItemsInMainDivOrGetMore = async function (vState, source) {
   }
   const newShowTotal = vState.loadState.totalShown + SHOW_INCREMENTS
 
-  const { newShownNum, unShownItemRemain } = lister.showHideCardsBasedOnFilters[list](vState, newShowTotal, source)
+  const { newShownNum, unShownItemRemain } = lister.showHideCardsBasedOnFilters[list](newShowTotal, source)
 
   if (unShownItemRemain || newShownNum > vState.shownNum) {
-    setTimeout(() => { lister.endCard.showMore(vState) }, 300)
+    setTimeout(() => { lister.endCard.showMore() }, 300)
     // doNothing - more button should work
   } else if (vState.loadState.autoTries < MAX_AUTO_INCREMENTS) {
     vState.loadState.autoTries++
@@ -2078,21 +2414,22 @@ lister.filterItemsInMainDivOrGetMore = async function (vState, source) {
       lister.drawCardsOnMainDiv(list, newItems, mainDiv)
       // test
       setTimeout(async () => {
-        await lister.filterItemsInMainDivOrGetMore(vState, 'auto')
+        await lister.filterItemsInMainDivOrGetMore('auto')
       }, 200)
     }
 
     // NB if (newShowTotal === vState.loadState.totalShown) {  Nothing new was shown as a result of the filter... should search more
   } else {
     // manual butt
-    setTimeout(() => { lister.endCard.showMore(vState) }, 500)
+    setTimeout(() => { lister.endCard.showMore() }, 500)
   }
   vState.loadState.totalShown = newShowTotal
   vState.shownNum = newShownNum
 }
+
 lister.fitsWordSearchCriteria = function (vSearchString, queryWords) {
   let fits = true
-  if (!vSearchString) console.warn('no search words ', { vSearchString, queryWords })
+  if (!vSearchString) console.warn('no search words ')
   if (!vSearchString) vSearchString = ''
   if (!isNaN(vSearchString)) vSearchString = vSearchString + ''
   if (vSearchString?.length === 0 || !queryWords || !queryWords.trim()) return true
@@ -2111,19 +2448,21 @@ lister.fitsWordSearchCriteria = function (vSearchString, queryWords) {
   return fits
 }
 lister.showHideCardsBasedOnFilters = {
-  hideAll: function (vState) {
+  hideAll: function () {
     lister.endCard.showLoading()
     const list = vState.queryParams.list
-    const { unfilteredItems, filteredItems } = vState[list]
-    const items = [...filteredItems, ...unfilteredItems]
-    for (let i = items.length - 1; i >= 0; i--) {
-      const cardDiv = dg.el(lister.idFromMark(items[i]))
-      // const cardDiv = dg.el('vitem_id_' + items[i]._id)
-      // const cardDiv = lister.idFromMark(items[i])
-      if (cardDiv) lister.showHideCard(cardDiv, false, { list })
+    if (vState[list] && list !== 'tabs'){
+      const { unfilteredItems, filteredItems } = vState[list]
+      const items = [...filteredItems, ...unfilteredItems]
+      for (let i = items.length - 1; i >= 0; i--) {
+        const cardDiv = dg.el(lister.idFromMark(items[i]))
+        // const cardDiv = dg.el('vitem_id_' + items[i]._id)
+        // const cardDiv = lister.idFromMark(items[i])
+        if (cardDiv) lister.showHideCard(cardDiv, false, { list })
+      }
     }
   },
-  marks: function (vState, newShowTotal, source) {
+  marks: function (newShowTotal, source) {
     let newShownNum = 0
     let unShownItemRemain = false
 
@@ -2167,7 +2506,7 @@ lister.showHideCardsBasedOnFilters = {
     })
     return { newShownNum, unShownItemRemain }
   },
-  messages: function (vState, newShowTotal, source) { // currently this is cut and paste from markes - needs to be redone for messages
+  messages: function (newShowTotal, source) { // currently this is cut and paste from markes - needs to be redone for messages
     let newShownNum = 0
     let unShownItemRemain = false
 
@@ -2196,7 +2535,7 @@ lister.showHideCardsBasedOnFilters = {
     })
     return { newShownNum, unShownItemRemain }
   },
-  history: function (vState, newShowTotal) {
+  history: function (newShowTotal) {
     let newShownNum = 0
     let unShownItemRemain = false
 
@@ -2236,7 +2575,57 @@ lister.showHideCardsBasedOnFilters = {
     })
     return { newShownNum, unShownItemRemain }
   },
-  publicmarks: function (vState, newShowTotal, source) {
+  tabs: function () {
+    const fitsCriteria = function (item, queryParams) {
+      let fits = true
+      // temp - all should have a vsearchstring
+      if (item && !item.vSearchString) item.vSearchString = resetVulogKeyWords(item)
+      fits = lister.fitsWordSearchCriteria(item?.vSearchString, queryParams.words)
+      if (fits) {
+      }
+      return fits
+    }
+
+    const searchOldCards = !vState.queryParams.tabsOpenOnly
+    const soundOnlyCards = vState.queryParams.tabsSoundOnly
+    let typeCounter = 0
+    vState.tabs.forEach(windowType => { // [openWindows, closedWindows]
+      typeCounter++
+      for (let [windowId, tabObjects] of Object.entries(windowType)) {
+        for (let [tabId, tabObject] of Object.entries(tabObjects)) {
+          tabObject.tabHistory.reverse().forEach((logItem, i) => {
+            const cardDiv = dg.el(lister.idFromMark(logItem)) // 'vitem_id_' + item._id) 
+            if (cardDiv) {
+              let doShow = true
+              if (!searchOldCards && (!tabObject.open || i < tabObject.tabHistory.length - 1)) { // typeCounter > 1 ||
+                doShow = false
+              } else if (soundOnlyCards && !tabObject.tabDetails?.audible) {
+                doShow = false
+              } else {
+                const doesFit = fitsCriteria(logItem, vState.queryParams)
+                if (!doesFit) doShow = false
+              }
+              const options = { list: 'tabs' }
+              if (!doShow && tabObject.tabHistory.length > 1 && i === tabObject.tabHistory.length - 1 ) options.uncollpasePrevious = true
+              lister.showHideCard(cardDiv, doShow, options) // , { isFiltered, vCollapsible: item.vCollapsible })
+              if (typeCounter === 1) { // close / mute button show hide
+                setTimeout(() => {
+                  const tabOuter = getParentWithClass(cardDiv, 'tabOuter')
+                  tabOuter.firstChild.style.display = doShow ? 'block' : 'none'
+                }, 300)
+              }
+            } else {
+              // if (vState.tempUndrawnIds.indexOf(item._id) < 0)console.warn('SNB - item not shown ', { counter, item })
+              console.warn('SNB - item not shown ', { logItem })
+            }
+
+          })
+        }
+      }
+    })
+    
+  },
+  publicmarks: function (newShowTotal, source) {
     let newShownNum = 0
     let unShownItemRemain = false
 
@@ -2284,12 +2673,13 @@ lister.showHideCard = function (cardDiv, doShow, options) {
     parent.style.height = doShow ? '100%' : '0'
   } else {
     parent.style.width = doShow ? (lister.dims[options.list].width + 'px') : '0'
-    parent.style.padding = doShow ? '10px' : '0'
+    parent.style.padding = (doShow && options?.list !== 'tabs') ? '10px' : '0'
   }
   // parent.style.margin = doShow ? '15px' : '0'
 
-  if (options?.list === 'history'){
+  if (options?.list === 'history' || options?.list === 'tabs' ) {
     const shouldCollpase = (parent.getAttribute('vCollapsible') && !(vState.queryParams.words))
+    // if (shouldCollpase && options?.list === 'tabs') parent.style.padding = '0'
     lister.setCardAsCollapsible(cardDiv, (doShow && shouldCollpase), options)
     if (!doShow) cardDiv.parentElement.style['margin-right'] = 0
     // if (!doShow && options?.uncollpasePrevious) { // uncollpase a card if the card in front of it has been filtered out
@@ -2328,9 +2718,9 @@ lister.showHideCard = function (cardDiv, doShow, options) {
 lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   const parent = cardDiv.parentElement
   cardDiv.style.transition = 'all 1.0s ease-out'
-  cardDiv.style['background-color'] = doSet ? 'lightgrey' : 'white'
+  if (options?.list === 'history') cardDiv.style['background-color'] = doSet ? 'lightgrey' : 'white'
 
-  parent.style['margin-right'] = doSet ? ('-' + (lister.dims[options.list].width - 10) + 'px') : '15px'
+  parent.style['margin-right'] = doSet ? ('-' + ((lister.dims[options.list].widthForCollpasing || lister.dims[options.list].width) - 10) + 'px') : '15px'
 
   const extlink = cardDiv.querySelector('.fa-external-link')
   if (extlink) extlink.style.display = doSet ? 'none' : 'inline-block'
@@ -2340,7 +2730,8 @@ lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   const collapsibleSides = ['.scrollAndTimeSpent', '.dateString', '.smallStarsOnCard', '.domainTitle', '.cardImageBox']
   collapsibleSides.forEach(hidableClass => {
     const hieableDiv = cardDiv.querySelector(hidableClass)
-    if (hieableDiv) hieableDiv.style.display = doSet ? 'none' : 'block'
+    if (hieableDiv) hieableDiv.style.display = doSet ? 'none' : ''
+    // if (hieableDiv && hidableClass === '.domainTitle' && doSet) hieableDiv.style.display = 'inline-block'
     // if (hieableDiv) hieableDiv.style['margin-left'] = doSet ? '20px' : null
   })
 
@@ -2353,6 +2744,7 @@ lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   titleDiv.style['margin-top'] = doSet ? '-5px' : '5px'
   titleDiv.style['margin-left'] = doSet ? '7px' : '0px'
   const showFullCard = function (e) {
+    if (options?.list === 'tabs') drawBoxAroundTabCards(cardDiv)
     e.preventDefault()
     lister.setCardAsCollapsible(cardDiv, false, options)
   }
@@ -2366,8 +2758,10 @@ lister.getMoreItems = async function () {
   const list = vState.queryParams.list
   // if (!vState[list]) vState[list] = lister.emptyStatsObj()
 
-  if (list !== 'messages') {
+  if (list !== 'messages' && list !== 'tabs') {
     return await lister.getMoreAndUpdateCountStatsFor(list)
+  } else if (list === 'tabs') {
+    return await vState.getRecentTabData()
   } else { // messages is actually two lists that need to be merged
     return await lister.getAllMessagesAndMerge()
   }
@@ -2469,9 +2863,12 @@ lister.resetDatesForList = function (list) {
   if (!statsObject.dates) statsObject.dates = lister.emptyStatsObjDatesItem()
   const mergedList = [...statsObject.unfilteredItems, ...statsObject.filteredItems]
   statsObject.dates.oldestModified = mergedList.reduce((acc, item) => Math.min((item?._date_modified || item?.fj_modified_locally || new Date().getTime()), acc), new Date().getTime())
-  statsObject.dates.newestModified = mergedList.reduce((acc, item) => Math.max((item?._date_modified || item?.fj_modified_locally || 0), acc), 0)
+  if (isNaN(statsObject.dates.oldestModified)) console.warn('Got a NaN for oldestModified', JSON.stringify(mergedList))
+    statsObject.dates.newestModified = mergedList.reduce((acc, item) => Math.max((item?._date_modified || item?.fj_modified_locally || 0), acc), 0)
+  if (isNaN(statsObject.dates.newestModified)) console.warn('Got a NaN for newestModified', JSON.stringify(mergedList))
   statsObject.dates.oldestCreated = mergedList.reduce((acc, item) => Math.min((item?.vCreated || item?._date_created || new Date().getTime()), acc), new Date().getTime())
-}
+  if (isNaN(statsObject.dates.oldestCreated)) console.warn('Got a NaN for oldestCreated', JSON.stringify(mergedList))
+  }
 lister.getMoreAndUpdateCountStatsFor = async function (list) {
   // onsole.log(' getMoreAndUpdateCountStatsFor')
   // this should only be used in getMoreItems or for marks, as it doesnt add the hasmarks key to the record
@@ -2556,7 +2953,7 @@ lister.getMoreAndUpdateCountStatsFor = async function (list) {
     console.error('SNBH')
   }
 }
-lister.drawFilters = function (vState) {
+lister.drawFilters = function () {
   const filterDiv = vState.divs.searchFilters
   filterDiv.innerHTML = ''
   const queryParams = vState.queryParams
@@ -2570,14 +2967,44 @@ lister.drawFilters = function (vState) {
     filterDiv.appendChild(dg.div(filterOuterParams, 'Filters: '))
     const includeFilters = dg.div(filterInnerParams,
       dg.span({ style: { 'vertical-align': 'super' } }, ' ')) // Must have
-    STARS.forEach(starName => { includeFilters.appendChild(lister.addFilterStar(starName, vState)) })
+    STARS.forEach(starName => { includeFilters.appendChild(lister.addFilterStar(starName)) })
     filterDiv.appendChild(includeFilters)
     // var excludeFilters = dg.span({ className: 'longcepsButt' }, 'Cannot have: ')
     // MAIN_STARS.forEach(starName => { excludeFilters.appendChild(lister.filterAdder(list, starName, 'exclude')) })
     // filterDiv.appendChild(excludeFilters)
+  } else if (list === 'tabs') {
+    filterDiv.appendChild(dg.span('Only show pages that ...  are open:', dg.input({
+      type: 'checkbox',
+      checked: vState.queryParams.tabsOpenOnly,
+      style: { width: '20px', height: '20px', 'vertical-align': 'middle', 'margin-right': '30px' },
+      onchange: async function (e) {
+        vState.queryParams.tabsOpenOnly = e.target.checked
+        lister.filterItemsInMainDivOrGetMore('searchChange')
+        const titleDivs = document.querySelectorAll('[closedTabTitle=true]')
+        titleDivs.forEach(titleDiv => {
+          titleDiv.style.display = (vState.queryParams.tabsOpenOnly ? 'none' : 'block')
+          titleDiv.nextSibling.style.display = 'none'
+        })
+        let windowDiv = document.querySelector('[closedWindowTitle=true]')
+        windowDiv.style.display = (vState.queryParams.tabsOpenOnly ? 'none' : 'flex')
+        while (windowDiv.nextSibling) {
+          windowDiv.nextSibling.style.display = 'none'
+          windowDiv = windowDiv.nextSibling
+        }
+      }
+    })))
+    filterDiv.appendChild(dg.span('have sound', dg.input({
+      type: 'checkbox',
+      checked: vState.queryParams.tabsSoundOnly,
+      style: { width: '20px', height: '20px', 'vertical-align': 'middle', 'margin-left': '10px' },
+      onchange: async function (e) {
+        vState.queryParams.tabsSoundOnly = e.target.checked
+        lister.filterItemsInMainDivOrGetMore('searchChange')
+      }
+    })))
   }
 }
-lister.addFilterStar = function (star, vState) {
+lister.addFilterStar = function (star) {
   const queryParams = vState.queryParams
   if (!queryParams.starFilters) queryParams.starFilters = []
   const existingFilters = queryParams.starFilters
@@ -2590,7 +3017,7 @@ lister.addFilterStar = function (star, vState) {
       if (newChosen) vState.queryParams.starFilters.push(star)
       if (!newChosen) vState.queryParams.starFilters.splice(queryParams.starFilters.indexOf(star), 1)
       e.target.className = ('vulog_overlay_' + star + '_' + (newChosen ? 'ch' : 'nc'))
-      await lister.filterItemsInMainDivOrGetMore(vState, 'searchChange')
+      await lister.filterItemsInMainDivOrGetMore('searchChange')
     }
   })
 }
@@ -2602,7 +3029,7 @@ lister.getdomain = function (aUrl) {
   const stop = aUrl.slice(start).indexOf('/')
   return aUrl.slice(0, stop + start)
 }
-lister.dragElement = function (elmnt, vState) {
+lister.dragElement = function (elmnt) {
   // https://www.w3schools.com/howto/howto_js_draggable.asp
   let pos1 = 0
   let pos2 = 0

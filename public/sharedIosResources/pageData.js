@@ -1,4 +1,4 @@
-// pageData.js - part of hiper.cards
+// pageData.js - part of vulog
 // changed 2022-04
 // Compare iosApp vs ChromeExtension - verified 2022-07-05
  
@@ -136,7 +136,7 @@ const addMetaTotags = function (parsedTags, allMetas, options = { ignoreNonStand
         // onsole.log('got meta '+mName+': '+m.getAttribute('content'))
         if (EQUIV_NAMES[mName]) {
           if (mName.indexOf('vulog') === 0) {
-            console.warn('some body is trying to play nasty tricks on hiper.cards. ;)')
+            console.warn('some body is trying to play nasty tricks on vulog. ;)')
           // } else if (['keywords'].indexOf(EQUIV_NAMES[mName]) > -1) { // Add all unique words
           //   parsedTags[EQUIV_NAMES[mName]] = addToListAsUniqueItems(parsedTags[EQUIV_NAMES[mName]], cleanTextForEasySearch(m.getAttribute('content')).split(' '))
           } else if (EQUIV_NAMES[mName] === 'domainApp') {
