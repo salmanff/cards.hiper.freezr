@@ -2892,7 +2892,7 @@ lister.getMoreAndUpdateCountStatsFor = async function (list) {
   // ideally a number of unfiltered items are returned so graphics can be nade nice.. adn then the filtered items are retirned so asd to make search more efficient
 
   if (['history', 'marks', 'sentMsgs', 'gotMsgs', 'publicmarks'].indexOf(list) > -1) {
-    statsObject.gotCount += newItems.length
+    statsObject.gotCount += (newItems?.length || 0)
 
     if (typeReturned === 'unfilteredItems' || typeReturned === 'filteredItems') {
       statsObject[typeReturned] = [...statsObject[typeReturned], ...newItems]
