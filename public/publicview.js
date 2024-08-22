@@ -55,13 +55,15 @@ const vState = {
 
     if (list === 'history') list = 'logs'
     const gotCount = params?.gotCount
+
+
     // const oldestCreated = params?.dates?.oldestCreated
     let oldestModified = params?.dates?.oldestModified
     if (!oldestModified) {
       console.warn('no oldestModified sent -DNBH')
       oldestModified = new Date().getTime()
     }
-    let q = { _date_modified: { $lt: oldestModified }, app_name: 'cards.hiper.freezr' }
+    let q = { _date_modified: { $lt: oldestModified } }
     let typeReturned
 
     if (!gotCount || gotCount < 100) { // 200 is a random limit for not sending back unfiltered items
@@ -71,10 +73,17 @@ const vState = {
       q = convertListerParamsToDbQuery(params.queryParams, q)
     }
     try {
-      const data = { q }
+      const data = { q, app_name: 'cards.hiper.freezr' }
       if (window.location.href.indexOf('/papp/@') > 0) {
-        data._data_owner = window.location.href.slice(window.location.href.indexOf('/papp/@') + 7, window.location.href.indexOf('/cards.hiper.freezr'))
+        if (vState.queryParams.dataOwner !== 'public') {
+          data.data_owner = vState.queryParams.dataOwner || vState.publicUser.slice(1)
+        }
+        if (vState.queryParams.feed) {
+          data.feed = vState.queryParams.feed
+          data.code = vState.queryParams.feedcode
+        }
       }
+      // onsole.log('data', data)
       const response = await fetch('/v1/pdbq', {
         method: 'POST',
         credentials: 'omit', // include, *same-origin, omit
@@ -114,7 +123,7 @@ const vState = {
       return { messages, mark }
     } catch (e) {
       console.warn('Ignoring error getting messages', e)
-      return ( mark, messages: [] )
+      return { mark, messages: [] }
     }
   },
   asyncMarksAndUpdateVstate: async function () {
@@ -268,14 +277,21 @@ const initState = async function () {
   vState.freezrMeta = freezrMeta || {}
 
   vState.publicUser = window.location.pathname.slice((window.location.pathname.indexOf('/papp/') + '/papp/'.length), window.location.pathname.indexOf('/cards.hiper.freezr') )
+
+  vState.queryParams = lister.getUrlParams()
+  // list, words, starFilters, notStarfilters, startDate, endDate
+  if (vState.queryParams.words) vState.divs.searchBox.innerText = vState.queryParams.words
+  const dataOwner = vState.queryParams.dataOwner || vState.publicUser.slice(1)
+
   dg.el('top_logo').onerror = function () {
     // onsole.log('didnt get image ' + '/publicfiles/@' + vState.publicUser + '/info.freezr.account/profilePict.jpg')
     // dg.el('top_logo').src = '/app_files/' + vState.publicUser + '/cards.hiper.freezr/public/static/logo.png'
     // dg.el('top_logo').onerror = null
-  } 
-  dg.el('top_logo').src = '/publicfiles/' + vState.publicUser + '/info.freezr.account/profilePict.jpg'
+  }
+  dg.el('top_logo').src = dataOwner === 'public' ? '/app_files/' + vState.publicUser + '/cards.hiper.freezr/public/static/logo.png' : '/publicfiles/@' + dataOwner + '/info.freezr.account/profilePict.jpg'
+  http://localhost:3000/app_files/@public/cards.hiper.freezr/public/static/logo.png
   dg.el('top_logo').style['border-radius'] = '25px'
-  dg.el('top_logo').nextElementSibling.innerText = vState.publicUser + "'s public hiper.cards posts"
+  dg.el('top_logo').nextElementSibling.innerText = vState.queryParams.feed || ((dataOwner !== 'public' ? (dataOwner + "'s ") : 'public ') + "hiper.cards posts")
 
   try {
     vState.friends = vState.freezrMeta?.perms?.friends?.granted ? await freepr.feps.postquery({ app_table: 'dev.ceps.contacts', permission_name: 'friends' }) : []
@@ -308,9 +324,7 @@ const initState = async function () {
   // const lists = ['messages', 'history', 'marks']
   // lists.forEach(list => { dg.el('click_gototab_' + list).onclick = clickers })
 
-  vState.queryParams = lister.getUrlParams()
-  // list, words, starFilters, notStarfilters, startDate, endDate
-  if (vState.queryParams.words) vState.divs.searchBox.innerText = vState.queryParams.words
+
   vState.queryParams.list = 'publicmarks'
   // TODO Add all other filters here
   resetHeaders()
@@ -345,7 +359,7 @@ const resetHeaders = function () {
   // if (document.querySelector('.tmChosen')) document.querySelector('.tmChosen').className = 'tmClosed'
   // if (document.getElementById('click_gototab_' + list)) document.getElementById('click_gototab_' + list).className = 'tmChosen'
   const statePrePath = (window.location.pathname.indexOf('index.html') < 0) ? 'cards.hiper.freezr/' : ''
-  window.history.pushState(null, '', statePrePath + 'index.html?view=' + list)
+  // window.history.pushState(null, '', statePrePath + 'index.html?view=' + list) // need to add feed and dataowner
 }
 
 const setUpDivsAndDrawItems = async function () {

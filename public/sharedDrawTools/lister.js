@@ -51,6 +51,11 @@ lister.getUrlParams = function () {
 
   queryParams.words = urlParams.get('words') || null
   queryParams.starFilters = urlParams.get('stars') || null
+
+  // for public and feeds
+  queryParams.feed = urlParams.get('feed') || null
+  queryParams.feedcode = urlParams.get('code') || null
+  queryParams.dataOwner = urlParams.get('owner') || null
   // queryParams.notStarfilters = urlParams.get('notstars') || null
   // queryParams.startDate = urlParams.get('startdate') || null
   queryParams.date = urlParams.get('date') || null
@@ -365,7 +370,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
       }
     }
     vState.tabs = [openWindows, closedWindows ]
-    console.log('tabs', { openWindows, closedWindows })
+    // console.log('tabs', { openWindows, closedWindows })
 
     // iterate open and closed tab
     const windowTypes = [openWindows, closedWindows] //  ['openTabs', 'closedTabs'] // 
@@ -1851,6 +1856,7 @@ drawSharingSubsection._public = function (purl, options) {
             const newMark = convertMarkToSharable((mark || getMarkFromVstateList(purl, { excludeHandC: true })), { excludeHlights: !mark })
             newMark.vComments = []
             if (messageBox.innerText) newMark.vComments = [{ text: messageBox.innerText, vCreated: new Date().getTime() }]
+            newMark.vSearchString = resetVulogKeyWords(newMark)
             newMark._id = publicMark._id
             const updateRet = await freepr.feps.update(newMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
@@ -1927,6 +1933,7 @@ drawSharingSubsection._public = function (purl, options) {
             if (messageBox.innerText) markCopy.vComments = [{ text: messageBox.innerText, vCreated: new Date().getTime() }]
             if (!markCopy) throw new Error('No mark or log to convert')
             markCopy.isPublic = true
+            markCopy.vSearchString = resetVulogKeyWords(markCopy)
             // deal with case of crashing here - isPublic is true but it is not shared.
             const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
             if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
@@ -2451,7 +2458,7 @@ lister.showHideCardsBasedOnFilters = {
   hideAll: function () {
     lister.endCard.showLoading()
     const list = vState.queryParams.list
-    if (vState[list] && list !== 'tabs'){
+    if (vState[list] && list !== 'tabs') {
       const { unfilteredItems, filteredItems } = vState[list]
       const items = [...filteredItems, ...unfilteredItems]
       for (let i = items.length - 1; i >= 0; i--) {
@@ -2581,8 +2588,7 @@ lister.showHideCardsBasedOnFilters = {
       // temp - all should have a vsearchstring
       if (item && !item.vSearchString) item.vSearchString = resetVulogKeyWords(item)
       fits = lister.fitsWordSearchCriteria(item?.vSearchString, queryParams.words)
-      if (fits) {
-      }
+      // if (fits) { }
       return fits
     }
 
@@ -2594,7 +2600,7 @@ lister.showHideCardsBasedOnFilters = {
       for (let [windowId, tabObjects] of Object.entries(windowType)) {
         for (let [tabId, tabObject] of Object.entries(tabObjects)) {
           tabObject.tabHistory.reverse().forEach((logItem, i) => {
-            const cardDiv = dg.el(lister.idFromMark(logItem)) // 'vitem_id_' + item._id) 
+            const cardDiv = dg.el(lister.idFromMark(logItem)) // 'vitem_id_' + item._id)
             if (cardDiv) {
               let doShow = true
               if (!searchOldCards && (!tabObject.open || i < tabObject.tabHistory.length - 1)) { // typeCounter > 1 ||
@@ -2618,12 +2624,10 @@ lister.showHideCardsBasedOnFilters = {
               // if (vState.tempUndrawnIds.indexOf(item._id) < 0)console.warn('SNB - item not shown ', { counter, item })
               console.warn('SNB - item not shown ', { logItem })
             }
-
           })
         }
       }
     })
-    
   },
   publicmarks: function (newShowTotal, source) {
     let newShownNum = 0
@@ -2688,15 +2692,13 @@ lister.showHideCard = function (cardDiv, doShow, options) {
     // }
   }
 
-    // orginal version
-    // const shouldCollpase = (parent.getAttribute('vCollapsible')) 
-    //   if (doShow && shouldCollpase) lister.setCardAsCollapsible(cardDiv, true, options)
-    //   if (!doShow && options?.uncollpasePrevious) { // uncollpase a card if the card in front of it has been filtered out
-    //     const prevCardParent = parent.previousSibling
-    //     if (prevCardParent && prevCardParent.getAttribute('vCollapsible') && prevCardParent.style.width !== '0px') lister.setCardAsCollapsible(prevCardParent.firstChild, false, options)
-    //   }
-    
-
+  // orginal version
+  // const shouldCollpase = (parent.getAttribute('vCollapsible')) 
+  //   if (doShow && shouldCollpase) lister.setCardAsCollapsible(cardDiv, true, options)
+  //   if (!doShow && options?.uncollpasePrevious) { // uncollpase a card if the card in front of it has been filtered out
+  //     const prevCardParent = parent.previousSibling
+  //     if (prevCardParent && prevCardParent.getAttribute('vCollapsible') && prevCardParent.style.width !== '0px') lister.setCardAsCollapsible(prevCardParent.firstChild, false, options)
+  //   }
   // if (options.list === 'history') {
   //   if (doShow && shouldCollpase) lister.setCardAsCollapsible(cardDiv, true, options)
   //   if (!doShow) {

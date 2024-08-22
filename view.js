@@ -186,7 +186,7 @@ const vState = {
     }
     try {
       const newItems = await freepr.feps.postquery({
-        app_table: apptable, q, count: getCount // , sort: { _date_modified: -1 }
+        app_table: apptable, q, count: getCount
       })
 
       newItems.sort(sortBycreatedDate).reverse()

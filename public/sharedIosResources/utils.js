@@ -132,11 +132,11 @@ const convertMarkToSharable = function (mark, options) {
       } else { //(hl.vComments?.length > 0) 
         const vComments = JSON.parse(JSON.stringify(hl.vComments))
         hl.vComments = []
-        vComments.forEach((vComment) => {
-          highlight.vComments = JSON.parse(JSON.stringify(highlight.vComments))
-            .filter(isOwnComment)
-            .map(assignSenderIdAndHostFromFreezrMeta)
-            .map(assignDateTextFromCreatedDate)
+        hl.vComments = vComments
+          .filter(isOwnComment)
+          .map(assignSenderIdAndHostFromFreezrMeta)
+          .map(assignDateTextFromCreatedDate)
+        // vComments.forEach((vComment) => {
           // vComment.dateText = overlayUtils.dateOrTime(vComment.vCreated)
           // if (isOwnComment(vComment)) {
           //   if (!vComment.sender_id) {
@@ -145,7 +145,7 @@ const convertMarkToSharable = function (mark, options) {
           //   }
           //   hl.vComments.push(vComment)
           // }
-        })
+        // })
       }
       newmark.vHighlights.push(hl)
     })
@@ -1052,13 +1052,7 @@ const overlayUtils = {
       color: 'darkgray'
     })
 
-    const dateOrTime = function (vCreated) {
-      // today: https://stackoverflow.com/questions/8215556/how-to-check-if-input-date-is-equal-to-todays-date
-      if (new Date().setHours(0, 0, 0, 0) === new Date(vCreated).setHours(0, 0, 0, 0)) return new Date(vCreated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      return new Date(vCreated).toLocaleDateString()
-    }
-
-    bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'right' }, dateOrTime(vComment.vCreated)))
+    bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'right' }, overlayUtils.dateOrTime(vComment.vCreated)))
     const bottomLineText = overlayUtils.makeEl('div', null, { overflow: 'hidden', height: '12px', 'text-overflow': 'ellipsis', 'margon-right': '5px' })
     if (vComment.hLightCopy) {
       bottomLineText.style.color = mapColor(vComment.hLightCopy.color)
@@ -1205,6 +1199,11 @@ const overlayUtils = {
       text
     }
   },
+  dateOrTime: function (vCreated) {
+    // today: https://stackoverflow.com/questions/8215556/how-to-check-if-input-date-is-equal-to-todays-date
+    if (new Date().setHours(0, 0, 0, 0) === new Date(vCreated).setHours(0, 0, 0, 0)) return new Date(vCreated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return new Date(vCreated).toLocaleDateString()
+  },
   // drawing messages
   vMessageCommentSummary: function (purl, vComments, existingDiv) {
     const outer = existingDiv || overlayUtils.makeEl('div', null, { 'margin-top': '10px', 'border-top': '1px lightgrey solid', 'padding-top': '10px' })
@@ -1321,7 +1320,7 @@ const overlayUtils = {
   },
   personPictUrl: function (personId, personHost) {
     if (!personHost && vState?.isExtension) personHost = vState.freezrMeta?.serverAddress
-    console.log('creating person pict url for ', { personId, personHost, url: ((personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg') })
+    // console.log('creating person pict url for ', { personId, personHost, url: ((personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg') })
     return (personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg'
   },
   fullPersonString: function (personId, personHost) {
