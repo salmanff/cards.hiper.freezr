@@ -253,9 +253,9 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
   if (!items || items.length === 0) return
 
   const outer = mainDiv.firstChild
-  outer.className = (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter'
 
   if (list === 'marks') {
+    outer.className = (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter'
     const moreDiv = outer.lastChild.previousSibling
     items.forEach(alog => {
       const theMark = lister.drawmarkItem(alog, { tabtype: list })
@@ -265,6 +265,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
       outer.insertBefore(theMark, moreDiv)
     })
   } else if (list === 'publicmarks') {
+    outer.className = (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter'
     const moreDiv = outer.lastChild.previousSibling
     items.forEach(alog => {
       const theMark = lister.drawpublicmarkItem(alog, { tabtype: list })
@@ -276,6 +277,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
     })
   } else if (list === 'messages') {
     // for all new messages, check if already drawn and if so merge, and if not draw
+    outer.className = (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter'
     const moreDiv = outer.lastChild.previousSibling
     items.forEach(alog => {
       const theMark = lister.drawMessageItem(alog, { tabtype: list })
@@ -285,58 +287,157 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
       outer.insertBefore(theMark, moreDiv)
     })
   } else if (list === 'history') {
-    for (let i = items.length - 1; i > 0; i--) {
-      const currentLog = items[i]
-      const domainsAndReferrers = [domainAppFromUrl(currentLog.url)]
-      if (currentLog.referrer) domainsAndReferrers.push(domainAppFromUrl(currentLog.referrer))
-
-      let keepCheckingCollpasibles = true
-      let j = i
-      let urlOfFirstFoundReferrer = null
-      while (keepCheckingCollpasibles && j-- > 0) {
-        const nextItem = items[j]
-        const nextItemDomain = nextItem ? domainAppFromUrl(nextItem.url) : null
-        let nextItemeferrer = nextItem ? domainAppFromUrl(nextItem.referrer) : null
-        if (nextItem && nextItem.referrer && !urlOfFirstFoundReferrer) urlOfFirstFoundReferrer = nextItem.referrer
-        if (urlOfFirstFoundReferrer && urlOfFirstFoundReferrer !== nextItem?.url) nextItemeferrer = null
-        if (!nextItem) {
-          console.warn('missing item snbh??', { nextItem, currentLog, i, j })
-        } else if (domainsAndReferrers.indexOf(nextItemDomain) > -1 || domainsAndReferrers.indexOf(nextItemeferrer) > -1) {
-          items[j].vCollapsible = true
-          domainsAndReferrers.push(nextItemDomain)
-          if (nextItemeferrer) domainsAndReferrers.push(nextItemeferrer)
-        } else {
-          keepCheckingCollpasibles = false
-        }
+    // console.log('drawCardsOnMainDiv history', { items })
+    // 1. first organsie into structured list
+    const structuredList = {}
+    const allLogs = {}
+    items.forEach(logItem => {  // add to allLogs
+      if (logItem.tabid && logItem.purl) {
+        allLogs[logItem.tabid + '_' + logItem.purl] = logItem
+      } else {
+        console.warn('missing tabid or purl in logItem', { logItem })
       }
-    }
+    })// todo merge same purls
+    items.forEach(logItem => {
+      let currentRoot = structuredList
+      if (logItem.referrerHistory && logItem.referrerHistory.length > 0) {
+        const fullList = logItem.referrerHistory.reverse()
+        const maintabIdPurl = logItem.tabid + '_' + logItem.purl
+        const uniqueRefPurlIdHistory = []
+        logItem.referrerHistory.forEach(tpo => {
+          const thisTabIdPurl = tpo.tabid + '_' + tpo.refPurl
+          if (!tpo.refPurl) console.warn('missing refPurl in referrerHistory', { tpo })
+          if (tpo.refPurl && thisTabIdPurl !== maintabIdPurl && uniqueRefPurlIdHistory.indexOf(thisTabIdPurl) < 0) uniqueRefPurlIdHistory.push(thisTabIdPurl)
+        })
+        uniqueRefPurlIdHistory.push(maintabIdPurl)
+        uniqueRefPurlIdHistory.forEach((tabIdPurlStr, i) => {
+        // for (let i = uniqueRefPurlIdHistory.length - 1; i > -1; i--) {
+        //   const tabIdPurlStr = uniqueRefPurlIdHistory[i]
+          if (!currentRoot[tabIdPurlStr]) {
+            let purl = tabIdPurlStr.split('_')
+            purl.shift()
+            purl = purl.join('_')
+            currentRoot[tabIdPurlStr] = { tabIdPurlStr, purl, logItem: allLogs[tabIdPurlStr], forwardRefs: { }}
+          } else {
+            // onsole.log('current root exists for ', { tabIdPurlStr })
+          }
+          currentRoot = currentRoot[tabIdPurlStr].forwardRefs
+        // }
+        })
+      } else if (logItem.purl) { // no referrer history
+        const tabIdPurlStr = logItem.tabid + '_' + logItem.purl
+        if (structuredList[tabIdPurlStr]) {
+          if (structuredList[tabIdPurlStr].logItem) console.log('consider merging...', logItem._id, logItem.purl)
+          if (!structuredList[tabIdPurlStr].logItem) structuredList[tabIdPurlStr].logItem = allLogs[logItem.tabid + '_' + logItem.purl]
+        } else {
+          structuredList[tabIdPurlStr] = { tabIdPurlStr, purl: logItem.purl, logItem: allLogs[tabIdPurlStr], forwardRefs: { }}
+          // structuredList[logItem.purl] = { purl: logItem.purl, logItem: allLogs[logItem.purl], forwardRefs: { }}
+        }
+      } else {
+        console.warn('missing purl in logItem', { logItem })
+      }
+    })
 
-    if (!vState.tempUndrawnIds) vState.tempUndrawnIds = []
+    console.log({ allLogs, structuredList })
+
+    const NoLogItemList = []
 
     const moreDiv = outer.lastChild.previousSibling
-    moreDiv.style.display = 'none'
-    for (let i = 0; i < items.length; i++) {
-      const alog = items[i]
-      if (alog.purl) {
-        while (items[i + 1] && items[i + 1].purl === alog.purl) {
-          vState.tempUndrawnIds.push(items[i + 1]._id)
-          alog.vulog_max_scroll = Math.max(alog.vulog_max_scroll, items[i + 1].vulog_max_scroll)
-          alog.vulog_visit_details = [...(alog.vulog_visit_details || []), ...(items[i + 1]?.vulog_visit_details || [])]
-          i++
+    // outer.className = ''
+    const addForwardsToList = function (currentRoot, list) {
+      if (!currentRoot.logItem) { 
+        currentRoot.tempId = 'tempId_' + Math.round(Math.random() * 1000, 0)
+        NoLogItemList.push(currentRoot)
+        if (!currentRoot.purl && currentRoot.tabIdPurlStr) {
+          console.warn('snbh - no purl for currentRoot', { currentRoot })
+          let newPurl = currentRoot.tabIdPurlStr.split('_')
+          newPurl.shift()
+          currentRoot.purl = newPurl.join('_')
         }
-        const theLogDiv = lister.drawlogItem(alog, { tabtype: list })
-        theLogDiv.style.width = '0'
-        theLogDiv.style.margin = '0'
-        theLogDiv.firstChild.style.transform = 'rotateY(90deg)'
-
-        if (alog.vCollapsible) theLogDiv.setAttribute('vCollapsible', true)
-        outer.insertBefore(theLogDiv, moreDiv)
+        const purl = currentRoot.purl
+        if (currentRoot.purl) {
+          list.push({
+            title: 'temporary card - original card not found',
+            purl:  currentRoot.purl,
+            url:  currentRoot.purl,
+            domainApp: domainAppFromUrl(currentRoot.purl),
+            vCreated: new Date().getTime(),
+            fj_local_temp_unique_id:  currentRoot.tempId 
+          })
+        } else {
+          console.warn('no purl for currentRoot', { currentRoot })
+        }
       } else {
-        console.warn('got log item with no purl', { alog })
+        list.push(currentRoot.logItem)
       }
+      if (currentRoot.forwardRefs) {
+        for (const key of Object.keys(currentRoot.forwardRefs)) {
+          addForwardsToList(currentRoot.forwardRefs[key], list)
+        }
+      }
+      return list
     }
+    const removeDuplicateTabidPurls = function (fullList) {
+      fullList = fullList.sort(sortBycreatedDate)
+      const newFullList = []
+      const tabidPurls = []
+      fullList.forEach((logItem, i) => {
+        const duplicteIndex = newFullList.findIndex((item) => item.tabid === logItem.tabid && item.purl === logItem.purl)
+        if (duplicteIndex < 0) {
+          newFullList.push(logItem)
+        } else {
+          if (logItem.vCreated > newFullList[duplicteIndex].vCreated) {
+            newFullList[duplicteIndex] = logItem
+            //merge other fields too ??
+          }
+        }
+      })
+      return newFullList.sort(sortBycreatedDate)
+    }
+    for (const root of Object.keys(structuredList)) {
+      let fullList = []
+      addForwardsToList(structuredList[root], fullList)
+      fullList = removeDuplicateTabidPurls(fullList)
+      
+      // const inner = dg.div({ className: (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter', style: { 'border-bottom': '1px solid white'} })
+      fullList.forEach((logItem, index) => {
+        const theLogDiv = lister.drawlogItem(logItem, { tabtype: list })
+        // inner.appendChild(theLogDiv)
+        outer.insertBefore(theLogDiv, moreDiv)
+        if (index < fullList.length -1) theLogDiv.setAttribute('vCollapsible', false)
+      })
+      //outer.insertBefore(inner, moreDiv)
+    }
+    setTimeout(async () => {
+      console.log('NoLogItemList', { NoLogItemList })
+      NoLogItemList.forEach(async (noLogItem) => {
+        let purl = noLogItem.purl
+        if (!purl && noLogItem.tabIdPurlStr) {
+          let newPurl = noLogItem.tabIdPurlStr.split('_')
+          newPurl.shift()
+          purl = newPurl.join('_')
+        }
+        const newLogItem = await vState.environmentSpecificGetHistoryItem(purl)
+        vState.history.filteredItems.push(newLogItem)
+        // onsole.log('NoLogItemList p2 ', { purl, newLogItem, noLogItem})
+        
+        const el = dg.el('vitem_temp_' + noLogItem.tempId)
+        if (el && newLogItem.log) {
+          const parent = el.parentElement
+          parent.innerHTML = ''
+          const newItem = lister.drawlogItem(newLogItem.log, { tabtype: 'history' })
+          parent.appendChild(newItem.firstChild)
+          parent.style.padding = '10px' //  ot sure whay this needed to be re-added?
+        } else {
+          console.warn('no new log item for ', { purl, newLogItem, el })
+        }
+      })
+    }, 10)
+
     setTimeout(() => { moreDiv.style.dispaly = 'block' }, 100)
+
   } else if (list === 'tabs') {
+    outer.className = (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter'
 
     // inmitiate page refresh listener if it hasnt been initiated already
     if (!vState.tabs) { 
@@ -370,7 +471,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
       }
     }
     vState.tabs = [openWindows, closedWindows ]
-    // console.log('tabs', { openWindows, closedWindows })
+    console.log('tabs', { openWindows, closedWindows })
 
     // iterate open and closed tab
     const windowTypes = [openWindows, closedWindows] //  ['openTabs', 'closedTabs'] // 
@@ -544,7 +645,7 @@ const drawBoxAroundTabCards = function (cardDiv) {
   cardDiv.parentElement.parentElement.parentElement.style['border-radius'] = '15px'
 }
 
-// draw marks and logs
+// draw cards: marks logs messages etc
 lister.dims = {
   marks: {
     width: 200,
@@ -552,6 +653,7 @@ lister.dims = {
   },
   history: {
     width: 200,
+    widthForCollpasing: 220,
     height: 200
   },
   tabs: {
@@ -763,6 +865,7 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
   return lister.addCard2ndOuter(itemdiv, 'publicmarks')
 }
 lister.drawlogItem = function (logItem, opt = {}) {
+  if (!logItem || !logItem.purl) return dg.div({style: { 'background-color': 'red', color: 'white' }}, 'err - No log item')
   const { tabtype, expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -838,7 +941,7 @@ lister.drawlogItem = function (logItem, opt = {}) {
   itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center', display: (expandedView ? 'block' : 'none') } }, stars))
   const smallStars = overlayUtils.drawSmallStars(markFromLog)
   smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
-  smallStars.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, 'Share'))
+  // smallStars.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, 'Share'))
   itemdiv.appendChild(dg.div({ className: 'smallStarsOnCard', style: { 'text-align': 'center', height: '15px', display: (expandedView ? 'none' : 'block') } }, smallStars))
 
   const notesBox = overlayUtils.drawMainNotesBox(markFromLog, { mainNoteSaver: vState.mainNoteSaver, log: logItem })
@@ -1343,6 +1446,7 @@ lister.addCard2ndOuter = function (cardOuter, list) {
   }, cardOuter)
 }
 lister.cardOuter = function (markOrLog, list, expandedView) {
+  if (document.getElementById(this.idFromMark(markOrLog))) console.warn('duplicateitem for ', { id: this.idFromMark(markOrLog), markOrLog})
   return dg.div({
     style: {
       height: (expandedView ? null : (lister.dims[list].height + 'px')),
@@ -1359,8 +1463,8 @@ lister.cardOuter = function (markOrLog, list, expandedView) {
   })
 }
 lister.idFromMark = function (mark) {
-  const type = mark._id ? 'id' : 'temp'
-  return 'vitem_' + type + '_' + (mark._id || mark.fj_local_temp_unique_id)
+  const type = mark?._id ? 'id' : 'temp'
+  return 'vitem_' + type + '_' + (mark?._id || mark?.fj_local_temp_unique_id || ('errorGettingid'))
 }
 lister.domainSpanWIthRef = function (markOrLog, expandedView) {
   return dg.div({
@@ -2544,7 +2648,6 @@ lister.showHideCardsBasedOnFilters = {
   },
   history: function (newShowTotal) {
     let newShownNum = 0
-    let unShownItemRemain = false
 
     const fitsCriteria = function (item, queryParams) {
       let fits = true
@@ -2563,24 +2666,24 @@ lister.showHideCardsBasedOnFilters = {
 
     const { unfilteredItems, filteredItems } = vState.history
     const items = [...filteredItems, ...unfilteredItems]
+    // const items = unfilteredItems.concat(filteredItems)
     let counter = 0
     items.forEach(item => {
-      const cardDiv = dg.el(lister.idFromMark(item)) // 'vitem_id_' + item._id) 
+      const cardDiv = document.getElementById(lister.idFromMark(item)) // 'vitem_id_' + item._id) 
       if (cardDiv) {
         const doesFit = fitsCriteria(item, vState.queryParams)
-        const doShow = doesFit && (newShownNum < newShowTotal)
-        if (doesFit && !doShow) unShownItemRemain = true
+        const doShow = doesFit // 2024-08 remvoed concept as new hostry view can't NOT show
         if (doShow) newShownNum++
         const options = { list: 'history' }
-        if (!doShow) options.uncollpasePrevious = true
+        if (!doShow) options.uncollpasePrevious = true  
         lister.showHideCard(cardDiv, doShow, options) // , { isFiltered, vCollapsible: item.vCollapsible })
       } else {
-        if (vState.tempUndrawnIds.indexOf(item._id) < 0)console.warn('SNB - item not shown ', { counter, item })
-        // console.warn('SNB - item not shown ', { counter, item })
+        // if (vState.tempUndrawnIds.indexOf(item._id) < 0)console.warn('SNB - item not shown ', { counter, item })
+        console.warn('SNB - item not shown ' + lister.idFromMark(item), { counter, item })
       }
       counter++
     })
-    return { newShownNum, unShownItemRemain }
+    return { newShownNum, unShownItemRemain: false }
   },
   tabs: function () {
     const fitsCriteria = function (item, queryParams) {
@@ -2671,8 +2774,8 @@ lister.showHideCardsBasedOnFilters = {
 }
 lister.showHideCard = function (cardDiv, doShow, options) {
   // options: isFiltered vCollapsible
+  // console.log('show hide ', { list: options?.list, doShow })
   const parent = cardDiv.parentElement
-
   if (vState.viewType === 'fullHeight') {
     parent.style.height = doShow ? '100%' : '0'
   } else {
@@ -2682,7 +2785,14 @@ lister.showHideCard = function (cardDiv, doShow, options) {
   // parent.style.margin = doShow ? '15px' : '0'
 
   if (options?.list === 'history' || options?.list === 'tabs' ) {
-    const shouldCollpase = (parent.getAttribute('vCollapsible') && !(vState.queryParams.words))
+    if (options?.list === 'history') {
+      if (doShow) {
+        expandSection(parent, { height: lister.dims.history.height})
+      } else {
+        setTimeout(() => { collapseIfExpanded(parent) }, 100)
+      }
+    }
+    const shouldCollpase = (parent.getAttribute('vCollapsible') && (options?.list !== 'tabs' || !(vState.queryParams.words)))
     // if (shouldCollpase && options?.list === 'tabs') parent.style.padding = '0'
     lister.setCardAsCollapsible(cardDiv, (doShow && shouldCollpase), options)
     if (!doShow) cardDiv.parentElement.style['margin-right'] = 0
@@ -2716,6 +2826,7 @@ lister.showHideCard = function (cardDiv, doShow, options) {
   } else {
     cardDiv.style.transform = doShow ? 'rotateY(0deg)' : 'rotateY(90deg)'
   }
+  
 }
 lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   const parent = cardDiv.parentElement

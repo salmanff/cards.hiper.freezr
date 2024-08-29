@@ -216,6 +216,15 @@ const vState = {
       return { mark, messages: [] }
     }
   },
+  environmentSpecificGetHistoryItem: async function (purl) {
+    const logsFromServer = await freepr.feps.postquery({
+      app_table: 'cards.hiper.freezr.logs',
+      q: { fj_deleted: { $ne: true }, purl }
+    })
+    const log = (logsFromServer && logsFromServer.length > 0) ? logsFromServer[0] : null
+
+    return { log }
+  },
   asyncMarksAndUpdateVstate: async function () {
     const q = { fj_deleted: { $ne: true }, _date_modified: { $gt: vState.marks.newestItem } }
     const newItems = await freepr.feps.postquery({
