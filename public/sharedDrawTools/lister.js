@@ -1,13 +1,12 @@
-
 // version 0.0.2 - apr 2024
 
-/* global screen, IntersectionObserver, freepr, freezr */ // from system
-/* global domainAppFromUrl, overlayUtils, convertDownloadedMessageToRecord, mergeMessageRecords  */ // from utils
+/* global screen, IntersectionObserver, freepr, freezr, chrome */ // from system
+/* global domainAppFromUrl, overlayUtils, convertDownloadedMessageToRecord, mergeMessageRecords, isEmpty  */ // from utils
 /* global dg */ // from dgelements.js
 /* from popupChromeExt - added a dummy */
-/* global  collapseIfExpanded, expandSection */ // from drawUtils
+/* global  collapseIfExpanded, expandSection, smallSpinner */ // from drawUtils
 /* global vState */ // from view.js
-/* global convertMarkToSharable, resetVulogKeyWords, dateLatestMessageSorter, sortBycreatedDate, convertPasteToText, convertLogToMark, getParentWithClass, MCSS, markMsgHlightsAsMarked */ // from utils
+/* global convertMarkToSharable, resetVulogKeyWords, dateLatestMessageSorter, sortByPublishedDate, sortBycreatedDate, convertPasteToText, convertLogToMark, getParentWithClass, MCSS, markMsgHlightsAsMarked, mergeHistoryItems */ // from utils
 
 // const SEARCH_COUNT = 40
 
@@ -85,7 +84,7 @@ lister.drawAllItemsForList = async function () {
   const list = vState.queryParams.list
   const mainDiv = vState.divs.main
   mainDiv.innerHTML = ''
-  
+
   window.scrollTo(0, 0)
 
   lister.createOuterDomStructure()
@@ -99,7 +98,7 @@ lister.drawAllItemsForList = async function () {
   if (!vState.marks && !vState.isPublicView) {
     vState.marks = lister.emptyStatsObj()
     vState.marks.lookups = {}
-    
+
     try {
       await lister.getMoreAndUpdateCountStatsFor('marks')
     } catch (e) {
@@ -108,8 +107,12 @@ lister.drawAllItemsForList = async function () {
     }
   }
 
+  if (vState.isExtension && !vState.allTabs) {
+    await lister.getRecentTabDataToUpdateState()
+  }
+
   if (vState[list]?.unfilteredItems && vState[list].unfilteredItems.length > 0) {
-    if (list === 'tabs') console.error('snbh drawAllItemsForList')
+    if (list === 'tabs') console.error('snbh drawAllItemsForList')      
     lister.drawCardsOnMainDiv(list, vState[list].unfilteredItems, mainDiv)
     vState.divs.spinner.style.display = 'none'
   } else if (!gotErr && vState[list] && list !== 'tabs' && vState[list].unfilteredItems.length === 0) {
@@ -118,7 +121,7 @@ lister.drawAllItemsForList = async function () {
   } else if (!gotErr) {
     try {
       const newItems = await lister.getMoreItems()
-      lister.drawCardsOnMainDiv(list, newItems, mainDiv)
+      await lister.drawCardsOnMainDiv(list, newItems, mainDiv)
       vState.divs.spinner.style.display = 'none'
     } catch (e) {
       console.warn('error in drawAllItemsForList ', e)
@@ -184,7 +187,7 @@ lister.endCard = {
       style: { display: 'none', margin: '50px 10px', 'text-align': 'center', 'border-radius': '5px', background: 'lightgrey', padding: '5px' }
     }, 'Nothing more to show.')
 
-    const loadingButt = dg.div({ style: { width: '20px', margin: '50px 90px 10px' } }, smallSpinner() )
+    const loadingButt = dg.div({ style: { width: '20px', margin: '50px 90px 10px' } }, smallSpinner())
     //     const loadingButt = dg.div({ style: { width: '20px', margin: '50px 90px 10px' } }, dg.img({ src: (freezr.app?.isWebBased ? '/app_files/@public/info.freezr.public/public/static/ajaxloaderBig.gif' : '/freezr/static/ajaxloaderBig.gif') }))
 
     return dg.div({ style: { height: '200px', width: '200px', margin: '25px 15px 65px 15px', 'vertical-align': 'center', display: 'none' } },
@@ -214,19 +217,23 @@ lister.endCard = {
           text = "You don't have any bookmarks yet. To book mark a page, click the extention icon on the top right of your browser window and mark it with a star or an inbox."
           break
         case 'history':
-          text = 'hiper.cards is not logging your browsing history. To log browsing history go to settings and enable that.'
+          text = 'You havent logged any items yet. Start browsing in other tabs and your history will be logged.'
           break
-          case 'tabs':
-            text = 'Tabs will be added here soon.'
-            break
+        case 'tabs':
+          text = 'There seems to be a problem accessign your tabs. sorry.'
+          break
         case 'messages':
-          text = vState.freezrMeta.userId ?
-            'To send your bookmark as a message, click the hiper.cards icon on the top right of your browser window to see your Sharing options.' :
-            'To be able to send and receive message, you need to log in to a CEPS compatible server. Go to Settings for more guidance.'
+          text = vState.freezrMeta.userId
+            ? 'To send your bookmark as a message, click the hiper.cards icon on the top right of your browser window to see your Sharing options.'
+            : 'To be able to send and receive message, you need to log in to a CEPS compatible server. Go to Settings for more guidance.'
           break
         default:
           text = 'Nothing more to show !'
       }
+    }
+    if (!vState.recordHistory && list === 'history') {
+      text = 'To log all your browsing history, go to settings and enable that. (This is turned off by default.)'
+      if (vState[list].unfilteredItems && vState[list].unfilteredItems.length > 0) text = 'YOu have turned off the logging of browing history. If you want to log your browsing history, Go to settings and turn it back on.'
     }
     nomoreButt.innerText = text || 'Nothing more to show!!'
     nomoreButt.style.display = 'block'
@@ -249,7 +256,7 @@ lister.endCard = {
     moreButt.nextSibling.nextSibling.style.display = 'block' // loading
   }
 }
-lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
+lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
   if (!items || items.length === 0) return
 
   const outer = mainDiv.firstChild
@@ -287,168 +294,163 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
       outer.insertBefore(theMark, moreDiv)
     })
   } else if (list === 'history') {
-    // console.log('drawCardsOnMainDiv history', { items })
-    // 1. first organsie into structured list
-    const structuredList = {}
-    const allLogs = {}
-    items.forEach(logItem => {  // add to allLogs
-      if (logItem.tabid && logItem.purl) {
-        allLogs[logItem.tabid + '_' + logItem.purl] = logItem
-      } else {
-        console.warn('missing tabid or purl in logItem', { logItem })
-      }
-    })// todo merge same purls
-    items.forEach(logItem => {
-      let currentRoot = structuredList
-      if (logItem.referrerHistory && logItem.referrerHistory.length > 0) {
-        const fullList = logItem.referrerHistory.reverse()
-        const maintabIdPurl = logItem.tabid + '_' + logItem.purl
-        const uniqueRefPurlIdHistory = []
-        logItem.referrerHistory.forEach(tpo => {
-          const thisTabIdPurl = tpo.tabid + '_' + tpo.refPurl
-          if (!tpo.refPurl) console.warn('missing refPurl in referrerHistory', { tpo })
-          if (tpo.refPurl && thisTabIdPurl !== maintabIdPurl && uniqueRefPurlIdHistory.indexOf(thisTabIdPurl) < 0) uniqueRefPurlIdHistory.push(thisTabIdPurl)
-        })
-        uniqueRefPurlIdHistory.push(maintabIdPurl)
-        uniqueRefPurlIdHistory.forEach((tabIdPurlStr, i) => {
-        // for (let i = uniqueRefPurlIdHistory.length - 1; i > -1; i--) {
-        //   const tabIdPurlStr = uniqueRefPurlIdHistory[i]
-          if (!currentRoot[tabIdPurlStr]) {
-            let purl = tabIdPurlStr.split('_')
-            purl.shift()
-            purl = purl.join('_')
-            currentRoot[tabIdPurlStr] = { tabIdPurlStr, purl, logItem: allLogs[tabIdPurlStr], forwardRefs: { }}
-          } else {
-            // onsole.log('current root exists for ', { tabIdPurlStr })
-          }
-          currentRoot = currentRoot[tabIdPurlStr].forwardRefs
-        // }
-        })
-      } else if (logItem.purl) { // no referrer history
-        const tabIdPurlStr = logItem.tabid + '_' + logItem.purl
-        if (structuredList[tabIdPurlStr]) {
-          if (structuredList[tabIdPurlStr].logItem) console.log('consider merging...', logItem._id, logItem.purl)
-          if (!structuredList[tabIdPurlStr].logItem) structuredList[tabIdPurlStr].logItem = allLogs[logItem.tabid + '_' + logItem.purl]
+    // onsole.log('drawCardsOnMainDiv history', { items })
+    // 0. Initialize
+    if (!vState.history.allLogs) vState.history.allLogs = {}
+    if (!vState.history.roots) vState.history.roots = {}
+    if (!vState.history.drawnRoots) vState.history.drawnRoots = []
+    const allLogs = vState.history.allLogs
+    const roots = vState.history.roots
+    const newRoots = []
+    const oldRootsWithNewItems = []
+
+    // 1 add all new items to all logs and add a root key to logItem
+    items.forEach((logItem) => {
+      // add to allLogs
+      if (!logItem.tabid) console.warn('snbh - unknown tab in history' + logItem._id)
+      if (!logItem.tabid) logItem.tabid = 'uknowntab'
+      if (!logItem.purl) {
+        console.warn('missing tabid or purl in logItem' + JSON.stringify(logItem._id || logItem.fj_local_temp_unique_id))
+      } else { // MAIN
+        if (allLogs[logItem.tabid + '_' + logItem.purl] && allLogs[logItem.tabid + '_' + logItem.purl]._id !== logItem._id) {
+          allLogs[logItem.tabid + '_' + logItem.purl] = mergeHistoryItems(logItem, allLogs[logItem.tabid + '_' + logItem.purl])
+          // console.warn(' mergeHistoryItems of not the same id', { allogsV: allLogs[logItem.tabid + '_' + logItem.purl], logItemsV: logItem })
         } else {
-          structuredList[tabIdPurlStr] = { tabIdPurlStr, purl: logItem.purl, logItem: allLogs[tabIdPurlStr], forwardRefs: { }}
-          // structuredList[logItem.purl] = { purl: logItem.purl, logItem: allLogs[logItem.purl], forwardRefs: { }}
+          allLogs[logItem.tabid + '_' + logItem.purl] = logItem
         }
-      } else {
-        console.warn('missing purl in logItem', { logItem })
+        let isRoot = false
+        if (logItem.referrerHistory && logItem.referrerHistory.length > 0) {
+          const rootTP =
+            logItem.referrerHistory[logItem.referrerHistory.length - 1]
+          logItem.rootTP = rootTP.tabid + '_' + rootTP.refPurl
+        } else {
+          isRoot = true
+          logItem.rootTP = logItem.tabid + '_' + logItem.purl
+        }
+        if (vState.history.drawnRoots.indexOf(logItem.rootTP) === -1) {
+          if (newRoots.indexOf(logItem.rootTP) < 0) newRoots.push(logItem.rootTP)
+          if (!roots[logItem.rootTP]) roots[logItem.rootTP] = { children: [] }
+        } else {
+          oldRootsWithNewItems.push(logItem.rootTP)
+        }
+        if (isRoot) {
+          roots[logItem.rootTP].rootItem = logItem
+          roots[logItem.rootTP].purl = logItem.purl
+          roots[logItem.rootTP].tabid = logItem.tabid
+        } else {
+          roots[logItem.rootTP].children.push(logItem)
+          const rootTP =
+            logItem.referrerHistory[logItem.referrerHistory.length - 1]
+          roots[logItem.rootTP].purl = rootTP.refPurl
+          roots[logItem.rootTP].tabid = rootTP.tabid
+        }
       }
     })
 
-    console.log({ allLogs, structuredList })
-
-    const NoLogItemList = []
-
-    const moreDiv = outer.lastChild.previousSibling
-    // outer.className = ''
-    const addForwardsToList = function (currentRoot, list) {
-      if (!currentRoot.logItem) { 
-        currentRoot.tempId = 'tempId_' + Math.round(Math.random() * 1000, 0)
-        NoLogItemList.push(currentRoot)
-        if (!currentRoot.purl && currentRoot.tabIdPurlStr) {
-          console.warn('snbh - no purl for currentRoot', { currentRoot })
-          let newPurl = currentRoot.tabIdPurlStr.split('_')
-          newPurl.shift()
-          currentRoot.purl = newPurl.join('_')
-        }
-        const purl = currentRoot.purl
-        if (currentRoot.purl) {
-          list.push({
-            title: 'temporary card - original card not found',
-            purl:  currentRoot.purl,
-            url:  currentRoot.purl,
-            domainApp: domainAppFromUrl(currentRoot.purl),
-            vCreated: new Date().getTime(),
-            fj_local_temp_unique_id:  currentRoot.tempId 
-          })
-        } else {
-          console.warn('no purl for currentRoot', { currentRoot })
-        }
-      } else {
-        list.push(currentRoot.logItem)
-      }
-      if (currentRoot.forwardRefs) {
-        for (const key of Object.keys(currentRoot.forwardRefs)) {
-          addForwardsToList(currentRoot.forwardRefs[key], list)
-        }
-      }
-      return list
-    }
+    // 2-pre util func for part 2
     const removeDuplicateTabidPurls = function (fullList) {
       fullList = fullList.sort(sortBycreatedDate)
       const newFullList = []
-      const tabidPurls = []
       fullList.forEach((logItem, i) => {
-        const duplicteIndex = newFullList.findIndex((item) => item.tabid === logItem.tabid && item.purl === logItem.purl)
-        if (duplicteIndex < 0) {
-          newFullList.push(logItem)
-        } else {
-          if (logItem.vCreated > newFullList[duplicteIndex].vCreated) {
-            newFullList[duplicteIndex] = logItem
-            //merge other fields too ??
-          }
-        }
+        const duplicteIndex = newFullList.findIndex(
+          (item) => item.tabid === logItem.tabid && item.purl === logItem.purl
+        )
+        if (duplicteIndex < 0) newFullList.push(logItem)
       })
       return newFullList.sort(sortBycreatedDate)
     }
-    for (const root of Object.keys(structuredList)) {
-      let fullList = []
-      addForwardsToList(structuredList[root], fullList)
-      fullList = removeDuplicateTabidPurls(fullList)
-      
-      // const inner = dg.div({ className: (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter', style: { 'border-bottom': '1px solid white'} })
+
+    // 2 - Start to draw roots
+    const moreDiv = outer.lastChild.previousSibling
+    const NoLogItemList = []
+    for (const root of newRoots) {
+      vState.history.drawnRoots.push(root)
+      const fullList = removeDuplicateTabidPurls(roots[root].children.sort(sortBycreatedDate))
+
+      if (!roots[root].rootItem) {
+        const newLogItem = null // await vState.environmentSpecificGetHistoryItem(roots[root].purl)
+        if (newLogItem && newLogItem.log) {
+          vState.history.filteredItems.push(newLogItem.log)
+          roots[root].rootItem = newLogItem.log
+        } else {
+          // decided to remove adding a temp card which would linger
+          //   const tempItem = {
+          //     title: 'Error getting card from server',
+          //     purl: roots[root].purl,
+          //     url: roots[root].purl,
+          //     domainApp: domainAppFromUrl(roots[root].purl),
+          //     vCreated: new Date().getTime(),
+          //     fj_local_temp_unique_id: 'tempId_' + Math.round(Math.random() * 1000, 0)
+          //   }
+          //   roots[root].rootItem  = tempItem
+          //   vState.history.filteredItems.push(tempItem) // for showhiding
+          }
+          // NoLogItemList.push(roots[root])
+      }
+      if (roots[root].rootItem) fullList.unshift(roots[root].rootItem)
+
+      const inner = dg.div({
+        className:
+          vState.viewType === 'fullHeight'
+            ? 'heightColumsGridOuter'
+            : 'widthFlexGridOuter',
+        style: {
+          border: '1px solid white',
+          'border-radius': '5px',
+          margin: '3px 5px 3px 10px',
+          padding: '3px'
+        }
+      })
+      inner.setAttribute('root', root)
       fullList.forEach((logItem, index) => {
         const theLogDiv = lister.drawlogItem(logItem, { tabtype: list })
-        // inner.appendChild(theLogDiv)
-        outer.insertBefore(theLogDiv, moreDiv)
-        if (index < fullList.length -1) theLogDiv.setAttribute('vCollapsible', false)
+        if (theLogDiv) {
+          inner.appendChild(theLogDiv)
+          // outer.insertBefore(theLogDiv, moreDiv)
+          if (index < fullList.length - 1) theLogDiv.setAttribute('vCollapsible', false)
+        }
       })
-      //outer.insertBefore(inner, moreDiv)
+      if (!options?.insertAtStart){
+        outer.insertBefore(inner, moreDiv)
+      } else {
+        outer.insertBefore(inner, outer.firstChild)
+      }
     }
-    setTimeout(async () => {
-      console.log('NoLogItemList', { NoLogItemList })
-      NoLogItemList.forEach(async (noLogItem) => {
-        let purl = noLogItem.purl
-        if (!purl && noLogItem.tabIdPurlStr) {
-          let newPurl = noLogItem.tabIdPurlStr.split('_')
-          newPurl.shift()
-          purl = newPurl.join('_')
-        }
-        const newLogItem = await vState.environmentSpecificGetHistoryItem(purl)
-        vState.history.filteredItems.push(newLogItem)
-        // onsole.log('NoLogItemList p2 ', { purl, newLogItem, noLogItem})
-        
-        const el = dg.el('vitem_temp_' + noLogItem.tempId)
-        if (el && newLogItem.log) {
-          const parent = el.parentElement
-          parent.innerHTML = ''
-          const newItem = lister.drawlogItem(newLogItem.log, { tabtype: 'history' })
-          parent.appendChild(newItem.firstChild)
-          parent.style.padding = '10px' //  ot sure whay this needed to be re-added?
-        } else {
-          console.warn('no new log item for ', { purl, newLogItem, el })
-        }
-      })
-    }, 10)
+
+    // 3 - slip in existing roots oldRootsWithNewItems
+    oldRootsWithNewItems.forEach((root) => {
+      const inner = outer.querySelector('[root="' + root + '"]')
+      if (inner) {
+        inner.innerHTML = ''
+        const fullList = removeDuplicateTabidPurls(roots[root].children.sort(sortBycreatedDate))
+        fullList.unshift(roots[root].rootItem)
+        fullList.forEach((logItem, index) => {
+          const theLogDiv = lister.drawlogItem(logItem, { tabtype: list })
+          if (theLogDiv){
+            inner.appendChild(theLogDiv)
+            if (index < fullList.length - 1) theLogDiv.setAttribute('vCollapsible', false)
+          }
+        })
+      } else {
+        console.warn('could not find inner for root ' + root)
+      }
+    })
+    // todo temp cards should be also added to filtered items
 
     setTimeout(() => { moreDiv.style.dispaly = 'block' }, 100)
-
   } else if (list === 'tabs') {
     outer.className = (vState.viewType === 'fullHeight') ? 'heightColumsGridOuter' : 'widthFlexGridOuter'
 
     // inmitiate page refresh listener if it hasnt been initiated already
-    if (!vState.tabs) { 
-      window.addEventListener('focus', function() {
+    if (!vState.tabs) {
+      window.addEventListener('focus', function () {
         // onsole.log('Window focus gained focus!') // https://www.codeease.net/programming/javascript/javascript-detect-if-the-browser-tab-is-active
         const list = vState.queryParams.list
         if (list === 'tabs') {
           lister.drawAllItemsForList()
         }
       })
-      // window.addEventListener('blur', function() { });
+      // window.addEventListener('blur', function () { });
     }
     const openWindows = {}
     const closedWindows = {}
@@ -456,25 +458,25 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
     let closedWindowCount = 0
     items.currentTabs.forEach(tab => {
       if (!openWindows[tab.windowId]) openWindows[tab.windowId] = {}
-      openWindows[tab.windowId][tab.id] = { open: true, tabDetails: tab, tabHistory: []}
+      openWindows[tab.windowId][tab.id] = { open: true, tabDetails: tab, tabHistory: [] }
       if (tab.incognito) incognitoWindowIds.push(tab.windowId) // openWindows[tab.windowId].incognito = true
     })
-    for (let tabid in items.logDetailsInRAM) {
-      const tabHistory = items.logDetailsInRAM[tabid] 
+    for (const tabid in items.logDetailsInRAM) {
+      const tabHistory = items.logDetailsInRAM[tabid]
       if (!openWindows[tabHistory[0].tabWindowId]) {
         if (!closedWindows[tabHistory[0].tabWindowId]) closedWindowCount++
         if (!closedWindows[tabHistory[0].tabWindowId]) closedWindows[tabHistory[0].tabWindowId] = {}
         closedWindows[tabHistory[0].tabWindowId][tabid] = { open: false, tabDetails: null, tabHistory }
       } else {
         if (!openWindows[tabHistory[0].tabWindowId][tabid]) openWindows[tabHistory[0].tabWindowId][tabid] = { open: false, tabDetails: null }
-        openWindows[tabHistory[0].tabWindowId][tabid].tabHistory = tabHistory 
+        openWindows[tabHistory[0].tabWindowId][tabid].tabHistory = tabHistory
       }
     }
-    vState.tabs = [openWindows, closedWindows ]
-    console.log('tabs', { openWindows, closedWindows })
+    vState.tabs = [openWindows, closedWindows]
+    // console.log('tabs', { openWindows, closedWindows })
 
     // iterate open and closed tab
-    const windowTypes = [openWindows, closedWindows] //  ['openTabs', 'closedTabs'] // 
+    const windowTypes = [openWindows, closedWindows] //  ['openTabs', 'closedTabs'] //
     let typeCounter = 0
     let windowCounter = 0
     let itemCounter = 1
@@ -482,24 +484,27 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
     windowTypes.forEach(windowType => {
       typeCounter++
       const titleDiv = dg.h2({
-        style: { cursor: (typeCounter > 1 ? 'pointer' : ''), color : (typeCounter > 1 ? 'cornflowerblue' : 'white'), margin: '20px 0px 0px 10px' },
-        onclick: typeCounter === 1 ? null : function (e) {
-          e.target.style.display = 'none'
-          let current = e.target
-          while (current.nextSibling) {
-            current.nextSibling.style.display = 'block'
-            current = current.nextSibling
-          }
-          // e.target.nextSibling.style.display = 'block'
-        }
+        style: { cursor: (typeCounter > 1 ? 'pointer' : ''), color: (typeCounter > 1 ? 'cornflowerblue' : 'white'), margin: '20px 0px 0px 10px' },
+        onclick:
+          typeCounter === 1
+            ? null
+            : function (e) {
+              e.target.style.display = 'none'
+              let current = e.target
+              while (current.nextSibling) {
+                current.nextSibling.style.display = 'block'
+                current = current.nextSibling
+              }
+            // e.target.nextSibling.style.display = 'block'
+            }
       }, (typeCounter === 1 || isEmpty(windowType)) ? '' : ('Show ' + closedWindowCount + ' Closed Windows'))
       if (typeCounter !== 1) titleDiv.setAttribute('closedWindowTitle', true)
       mainDiv.appendChild(titleDiv)
-      for (let [windowId, tabObjects] of Object.entries(windowType)) {
+      for (const [windowId, tabObjects] of Object.entries(windowType)) {
         const isIncognito = incognitoWindowIds.indexOf(parseInt(windowId)) > -1
         const windowOuter = dg.div({ style: { padding: '0px', 'border-radius': '20px', background: 'rgb(10 150 100)', margin: '10px', border: '1px solid white' } })
         if (typeCounter > 1) windowOuter.style.display = 'none'
-        const windowTitle = dg.h3({ style: { padding: '0px 0px 0px 20px', color: (isIncognito ? 'black' : 'white')  } }, (typeCounter === 1 ? '' : 'Closed ') + (isIncognito ? ' Incognito ' : '') + 'Window ' + ++windowCounter)
+        const windowTitle = dg.h3({ style: { padding: '0px 0px 0px 20px', color: (isIncognito ? 'black' : 'white') } }, (typeCounter === 1 ? '' : 'Closed ') + (isIncognito ? ' Incognito ' : '') + 'Window ' + ++windowCounter)
         windowOuter.append(windowTitle)
         const openTabsOuter = lister.emptyFlexBox()
         const drawtabHistory = function (tabObject, tabIsOpen, windowIsOpen) {
@@ -517,9 +522,9 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
               tabWindowId: tabObject.tabDetails.windowId
             }]
           }
-          const drawnTabUrls = [ tabObject.tabHistory[0].purl ]
+          const drawnTabUrls = [tabObject.tabHistory[0].purl]
           tabObject.tabHistory.reverse().forEach((logItem, i) => {
-            if (drawnTabUrls.indexOf(logItem.purl) < 0 || i === tabObject.tabHistory.length - 1) { 
+            if (drawnTabUrls.indexOf(logItem.purl) < 0 || i === tabObject.tabHistory.length - 1) {
               drawnTabUrls.push(logItem.purl)
               logItem.fj_local_temp_unique_id = itemCounter++
               const isCurrentOpenCard = ((i === tabObject.tabHistory.length - 1) && tabIsOpen)
@@ -527,70 +532,71 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
               theLogDiv.firstChild.style.background = (isCurrentOpenCard ? 'white' : 'lightgrey')
               if (i < tabObject.tabHistory.length - 1) {
                 theLogDiv.setAttribute('vCollapsible', true)
-                //theLogDiv.firstChild.style.transform = 'rotateY(90deg)'      
+                // theLogDiv.firstChild.style.transform = 'rotateY(90deg)'
               }
               tabDiv.appendChild(theLogDiv)
-            } else { /* tab is already drawn */}
+            } else { /* tab is already drawn */ }
           })
-          const outer = dg.div({ className: 'tabOuter', style: { padding: '10px' /*, border: '1px solid red' */ }})
+          const outer = dg.div({ className: 'tabOuter', style: { padding: '10px' /*, border: '1px solid red' */ } })
 
           if (tabIsOpen) {
             outer.appendChild(dg.div(
-              { style: { 'text-align': 'right', 'margin-right': '40px', 'min-height': '16px'}},
-                dg.div({ className: 'muteCloseHolder'},   
-                  dg.span({
-                    className:'muteButton', 
-                    style: { display: (tabObject.tabDetails?.audible && !tabObject.tabDetails?.mutedInfo?.muted ? '': 'none'), background: 'white', 'margin-right': '5px', 'border-radius': '5px', padding: '5px', cursor: 'pointer', color: 'mediumpurple' },
-                    onclick: (e) => {
-                      chrome.tabs.update(tabObject.tabDetails?.id, { muted: true }, function() { })
-                      const muteButton = getParentWithClass(e.target, 'muteButton')
-                      muteButton.style.display = 'none'
-                    }
-                  },
-                  dg.span('Mute'),
-                  dg.span({ className: 'fa fa-volume-off', style: { width: '15px', 'font-size': '15px' } }),
-                  dg.span({ className: 'fa fa-times', style: { width: '10px', 'font-size': '10px', 'vertical-align': 'top', 'margin-top': '3px'} })
-                  ),
-                  dg.span({
+              { style: { 'text-align': 'right', 'margin-right': '40px', 'min-height': '16px' } },
+              dg.div({ className: 'muteCloseHolder' },
+                dg.span({
+                  className: 'muteButton',
+                  style: { display: (tabObject.tabDetails?.audible && !tabObject.tabDetails?.mutedInfo?.muted ? '' : 'none'), background: 'white', 'margin-right': '5px', 'border-radius': '5px', padding: '5px', cursor: 'pointer', color: 'mediumpurple' },
+                  onclick: (e) => {
+                    chrome.tabs.update(tabObject.tabDetails?.id, { muted: true }, function () { })
+                    const muteButton = getParentWithClass(e.target, 'muteButton')
+                    muteButton.style.display = 'none'
+                  }
+                },
+                dg.span('Mute'),
+                dg.span({ className: 'fa fa-volume-off', style: { width: '15px', 'font-size': '15px' } }),
+                dg.span({ className: 'fa fa-times', style: { width: '10px', 'font-size': '10px', 'vertical-align': 'top', 'margin-top': '3px' } })
+                ),
+                dg.span({
                   style: { background: 'white', 'border-radius': '5px', padding: '5px', cursor: 'pointer', color: 'indianred' },
                   onclick: (e) => {
-                    chrome.tabs.remove(tabObject.tabDetails?.id, function() {
+                    chrome.tabs.remove(tabObject.tabDetails?.id, function () {
                       const theDiv = getParentWithClass(e.target, 'tabOuter')
                       Array.from(theDiv.firstChild.nextSibling.childNodes).forEach(child => {
                         child.style.transform = 'rotateX(90deg)'
                       })
-                      setTimeout(() => {theDiv.remove() }, 400); 
+                      setTimeout(() => { theDiv.remove() }, 400)
                       windowType[tabObject.tabDetails?.windowId][tabObject.tabDetails?.id].open = false
-                      
+
                       const closedTabsOuter = document.querySelector('[closedTabListForWindow="' + tabObject.tabDetails?.windowId + '"]')
-                      closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1))) 
+                      closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1)))
                       // nb if this is the last window should remove the window and add it to closed windows secion, ut igneod that for the moment
-                      })
+                    })
                     // chrome.tabs.remove(tab.id, function() { })
                     // theDiv.style.display = 'none'
                     // remove from db
                   }
-                }, 
+                },
                 dg.span('Close'),
-                dg.span({ className: 'fa fa-times', style: { width: '20px'} })
-            ))))
-            outer.appendChild(dg.div({ style: { 'min-width': '2px'}}))
+                dg.span({ className: 'fa fa-times', style: { width: '20px' } })
+                ))))
+            outer.appendChild(dg.div({ style: { 'min-width': '2px' } }))
           }
           outer.append(tabDiv)
           return outer
         }
         const closedTabList = []
         const openTabsList = []
-        for (let [tabId, tabObject] of Object.entries(tabObjects)) {
+        for (const [tabId, tabObject] of Object.entries(tabObjects)) {
           if (!tabObject.open) {
             tabObject.tabDetails = { windowId: parseInt(windowId) }
             closedTabList.push(tabObject)
           } else {
             openTabsList.push(tabObject)
+            if (tabId === null) console.log('eslint hack')
           }
         }
         openTabsList.sort((a, b) => { return a.tabDetails.index < b.tabDetails.index ? -1 : 1 })
-        openTabsList.forEach(tabObject => 
+        openTabsList.forEach(tabObject =>
           openTabsOuter.appendChild(drawtabHistory(tabObject, true, true))
         )
         windowOuter.appendChild(openTabsOuter)
@@ -598,7 +604,7 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
         const closedTabsOuter = lister.emptyFlexBox()
         if (closedTabList && closedTabList.length > 0) {
           const titleDiv = dg.div({
-            style: { 'padding': '20px', 'font-size': '12px', color: 'blue  ', cursor: 'pointer', display: (typeCounter === 1 ? 'block' : 'none') },
+            style: { padding: '20px', 'font-size': '12px', color: 'blue  ', cursor: 'pointer', display: (typeCounter === 1 ? 'block' : 'none') },
             onclick: function (e) {
               e.target.style.display = 'none'
               e.target.nextSibling.style.display = 'flex'
@@ -606,20 +612,19 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
             }
           }, 'See ' + closedTabList.length + ' Closed Tabs')
           if (typeCounter === 1) titleDiv.setAttribute('closedTabTitle', true)
-          windowOuter.appendChild(titleDiv) 
+          windowOuter.appendChild(titleDiv)
 
           closedTabsOuter.setAttribute('closedTabListForWindow', windowId)
           closedTabsOuter.style['border-top'] = '1px solid white'
           closedTabsOuter.style.display = (typeCounter > 1 ? 'flex' : 'none')
           // closedTabsOuter.style.height = '0'
-          closedTabList.forEach(tabObject => 
+          closedTabList.forEach(tabObject =>
             closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1)))
           )
         }
         windowOuter.appendChild(closedTabsOuter)
 
-   // use openerTabId as a way of finding referrer!
-   // 
+        // use openerTabId as a way of finding referrer!
         mainDiv.appendChild(windowOuter)
       }
     })
@@ -628,11 +633,12 @@ lister.drawCardsOnMainDiv = function (list, items, mainDiv) {
 const tabRecordByPurl = function (purl) {
   let logToreturn = null
   vState.tabs.forEach(windowType => {
-    for (let [windowId, tabObjects] of Object.entries(windowType)) {
-      for (let [tabId, tabObject] of Object.entries(tabObjects)) {
+    for (const [windowId, tabObjects] of Object.entries(windowType)) {
+      for (const [tabId, tabObject] of Object.entries(tabObjects)) {
         tabObject.tabHistory.forEach((logItem, i) => {
           if (logItem.purl === purl) logToreturn = logItem
           if (logItem.purl === purl) return logItem
+          if (windowId === tabId) console.log('eslint hack')
         })
       }
     }
@@ -643,6 +649,7 @@ const drawBoxAroundTabCards = function (cardDiv) {
   cardDiv.parentElement.parentElement.parentElement.style.border = '2px solid white'
   cardDiv.parentElement.parentElement.parentElement.style.background = 'rgb(10, 120, 70)' // 'rgb(121, 172, 18)'
   cardDiv.parentElement.parentElement.parentElement.style['border-radius'] = '15px'
+  cardDiv.parentElement.parentElement.parentElement.style['min-height'] = '140px'
 }
 
 // draw cards: marks logs messages etc
@@ -653,7 +660,7 @@ lister.dims = {
   },
   history: {
     width: 200,
-    widthForCollpasing: 220,
+    widthForCollpasing: 205,
     height: 200
   },
   tabs: {
@@ -691,7 +698,7 @@ lister.drawmarkItem = function (markOnMark, opt = {}) {
   if (!markOnMark.url) console.warn('No url is markOnMark', { markOnMark })
   titleOuter.appendChild(lister.openOutside(markOnMark.url))
 
-  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, (markOnMark.title || markOnMark.purl.replace(/\//g, ' ')))
+  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, lister.createSanitizedTitle(markOnMark))
   titleInner.setAttribute('href', markOnMark.url)
   titleOuter.appendChild(titleInner)
 
@@ -714,7 +721,7 @@ lister.drawmarkItem = function (markOnMark, opt = {}) {
   notesBox.style.margin = '0px 0px 5px 0px'
   notesBox.style['max-height'] = '40px'
   notesBox.style.height = '40px'
-  notesBox.style['overflow-y'] = 'scroll'
+  notesBox.style['overflow-y'] = 'auto'
   itemdiv.appendChild(notesBox)
 
   const modifiedDate = new Date(markOnMark._date_modified || markOnMark.fj_modified_locally)
@@ -765,7 +772,6 @@ lister.summarySharingAndHighlights = function (markOnMark) {
   const sharingButt = dg.div(
     { style: { 'text-align': 'center', color: 'purple', height: '32px', overflow: 'hidden', padding: '2px 5px 2px 5px' } }, sharingSpan)
   sharingButt.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark)) }
-    // : function () { window.open('logInPage', '_self') }
   summarySharingAndHighlights.appendChild(sharingButt)
   return summarySharingAndHighlights
 }
@@ -837,7 +843,7 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
 
     //  display: 'block', 'text-align': 'right', padding: '5px 0px', width: '100%',
     const openWithVulog = dg.a({ style: { float: 'right', 'font-size': 'small', 'font-weight': 'normal' } }, 'Open with hiper.cards')
-    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') +  '/' + markOnMark._id + '?vulogredirect=true'
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/' + markOnMark._id + '?vulogredirect=true'
     openWithVulog.setAttribute('href', href)
     openWithVulog.setAttribute('target', '_blank')
     titleOuter.firstChild.appendChild(openWithVulog)
@@ -865,7 +871,7 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
   return lister.addCard2ndOuter(itemdiv, 'publicmarks')
 }
 lister.drawlogItem = function (logItem, opt = {}) {
-  if (!logItem || !logItem.purl) return dg.div({style: { 'background-color': 'red', color: 'white' }}, 'err - No log item')
+  if (!logItem || !logItem.purl) return null // dg.div() // ({ style: { 'background-color': 'darkgreen', 'border-radius': '3px', padding: '3px', 'height': '30px', 'width': '30px', color: 'white', 'text-align': 'center' } }, '-?-')
   const { tabtype, expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -883,18 +889,10 @@ lister.drawlogItem = function (logItem, opt = {}) {
 
   itemdiv.appendChild(lister.domainSpanWIthRef(logItem, expandedView))
 
-  let urlText = (logItem.title || (logItem.purl.replace(/\//g, ' ')))
-  if (urlText.indexOf('chrome-extension') === 0 || urlText.indexOf('http') === 0) {
-    const oldUrl = urlText
-    urlText = ''
-    for (let i = 0; i < oldUrl.length; i++) {
-      urlText += (oldUrl.charAt(i) + '&#8203')
-    }
-  }
   if (!logItem.url) console.warn('No url is logItem', { logItem })
   const titleOuter = lister.titleOuter(expandedView)
   const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } })
-  titleInner.innerHTML = urlText
+  titleInner.innerText = lister.createSanitizedTitle(logItem)
   titleInner.setAttribute('href', logItem.url)
 
   titleOuter.appendChild(lister.openOutside(logItem.url))
@@ -947,22 +945,9 @@ lister.drawlogItem = function (logItem, opt = {}) {
   const notesBox = overlayUtils.drawMainNotesBox(markFromLog, { mainNoteSaver: vState.mainNoteSaver, log: logItem })
   itemdiv.appendChild(dg.div({ className: 'vNote', style: { display: (expandedView ? 'block' : 'none') } }, notesBox))
 
-  itemdiv.appendChild(
-    dg.div({
-      style: {
-        display: 'none',
-        height: '17px',
-        'text-overflow': 'ellipsis',
-        'white-space': 'nowrap',
-        'vertical-align': 'bottom',
-        color: MCSS.DARK_GREY
-      },
-      className: 'viaReferrer'
-    },
-    (logItem?.referrer?.trim() ? (dg.span(' via ', dg.a({ href: logItem.referrer, style: { color: 'grey' } }, logItem.referrer))) : ' ')
-    ))
+  itemdiv.appendChild(lister.drawReferrerHistory(logItem))
 
-  const dateToUse = new Date(logItem.vCreated) // logItem._date_modified
+  const dateToUse = new Date(logItem.fj_modified_locally || logItem._date_modified || logItem.vCreated) // logItem._date_modified
 
   const weekday = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
   const dateString = weekday[dateToUse.getDay()] + ' ' + (dateToUse.toLocaleDateString() + ' ' + dateToUse.toLocaleTimeString()) // + ' ' + dateToUse
@@ -1015,47 +1000,14 @@ lister.drawTabItem = function (logItem, opt = {}) {
   itemdiv.appendChild(minMax)
 
   itemdiv.appendChild(lister.domainSpanWIthRef(logItem, expandedView))
- 
-  let urlText = (logItem.title || (logItem.purl.replace(/\//g, ' ')))
-  if (urlText.indexOf('chrome-extension') === 0 || urlText.indexOf('http') === 0) {
-    const oldUrl = urlText
-    urlText = ''
-    for (let i = 0; i < oldUrl.length; i++) {
-      urlText += (oldUrl.charAt(i) + '&#8203')
-    }
-  }
+
   if (!logItem.purl) console.warn('No purl is logItem', { logItem })
+
   const titleOuter = lister.titleOuter(expandedView)
-  const goToOrOpenTab = function () {
-    if (tabIsOpen && isCurrentOpenCard) {
-      // chrome.tabs.update(logItem.tabid, { active: true })
-      // chrome.windows.update(logItem.tabWindowId, { focused: true })
-      chrome.windows.update(tabDetails.windowId, {focused: true}, (window) => {
-        chrome.tabs.update(tabDetails.id, {active: true})
-      })
-    } else if (parseInt(itemdiv.parentElement.style.marginRight) < 0){
-      // do nothing as card is collapsed
-    } else if (!windowIsOpen) {
-      window.open(logItem.url, '_blank')
-    } else {
-      chrome.tabs.create({
-        url: logItem.url,
-        active: true,
-        windowId: tabDetails.windowId
-      }, function (newInfo) {
-        chrome.windows.update(tabDetails.windowId, {focused: true}, (window) => {
-          chrome.tabs.update(newInfo.id, {active: true})
-        })
-      })
-    }
-  }
-  const titleInner = dg.a({ onclick: goToOrOpenTab, style: { overflow: 'hidden', 'text-decoration': 'none', cursor: 'pointer' } })
-  titleInner.innerHTML = urlText
-  titleOuter.appendChild(dg.div({
-    className: 'fa fa-external-link',
-    style: { float: 'right', color: 'cornflowerblue', 'font-size': '18px', margin: '6px 0px 0px 5px', cursor: 'pointer' },
-    onclick: goToOrOpenTab
-  }))
+  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } })
+  titleInner.innerText = lister.createSanitizedTitle(logItem)
+  titleInner.setAttribute('href', logItem.url)
+  titleOuter.appendChild(lister.openOutside(logItem.url, { itemdiv }))
   titleOuter.appendChild(titleInner)
 
   itemdiv.appendChild(titleOuter)
@@ -1149,7 +1101,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
   const titleOuter = lister.titleOuter(expandedView)
   titleOuter.appendChild(lister.openOutside(msgRecord.url))
 
-  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, (msgRecord.title || msgRecord.purl.replace(/\//g, ' ')))
+  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, lister.createSanitizedTitle(msgRecord))
   titleInner.setAttribute('href', msgRecord.url)
   titleOuter.appendChild(titleInner)
 
@@ -1222,9 +1174,8 @@ lister.setItemExpandedStatus = async function (id) {
   }
   const titleOuter = theDiv.querySelector('.vulog_title_url')
   titleOuter.style.height = doExpand ? null : '33px'
-  const smallStarsOnCard = theDiv.querySelector('.smallStarsOnCard') 
+  const smallStarsOnCard = theDiv.querySelector('.smallStarsOnCard')
   if (smallStarsOnCard) smallStarsOnCard.style.display = doExpand ? 'block' : 'none'
-
 
   const divLeft = theDiv.getClientRects()[0].left
   const screenWidth = document.body.getClientRects()[0].width
@@ -1253,7 +1204,7 @@ lister.setItemExpandedStatus = async function (id) {
   if (doExpand) {
     if (trash) trash.style.display = 'block'
     if (trash) trash.parentElement.style['padding-right'] = '40px'
-    const color = list === 'tabs' && theDiv.parentElement.getAttribute('vCollapsible') === 'true' ? 'lightgrey' : 'white' 
+    const color = list === 'tabs' && theDiv.parentElement.getAttribute('vCollapsible') === 'true' ? 'lightgrey' : 'white'
     theDiv.firstChild.nextSibling.style.background = 'linear-gradient(to bottom, #aae9cc, ' + color + ' 20%, #aae9cc 20%, ' + color + ' 30%, #aae9cc 40%, ' + color + ' 50%, #aae9cc 60%, ' + color + ' 70%, #aae9cc 80%, ' + color + ' 90%)'
     theDiv.firstChild.nextSibling.style.cursor = 'grab'
     theDiv.firstChild.nextSibling.id = theDiv.id + 'header'
@@ -1278,7 +1229,7 @@ lister.setItemExpandedStatus = async function (id) {
   const starsOnCard = theDiv.querySelector('.starsOnCard')
   if (starsOnCard) starsOnCard.style.display = (doExpand || list === 'marks') ? 'block' : 'none'
 
-  // When expand, look up purl to see if it has been marked. And reset 
+  // When expand, look up purl to see if it has been marked. And reset
   if (doExpand) {
     if (!vState.marks?.lookups || !vState.marks?.lookups[purl] || !vState.messages?.lookups || !vState.messages.lookups[purl]) { // ) { //
       let existing = null
@@ -1441,12 +1392,16 @@ const refreshSharedMarksinVstateFor = async function (purl) {
 lister.addCard2ndOuter = function (cardOuter, list) {
   return dg.div({
     style: {
-      margin: (list === 'tabs' ? '0' : '15px'), width: (lister.dims[list].width + 'px'), transition: 'all 0.5s ease-out'
+      margin: list === 'tabs' ? '0' : list === 'history' ? '5px' : '15px',
+      width: lister.dims[list].width + 'px',
+      transition: 'all 0.5s ease-out'
     }
-  }, cardOuter)
+  },
+  cardOuter
+  )
 }
 lister.cardOuter = function (markOrLog, list, expandedView) {
-  if (document.getElementById(this.idFromMark(markOrLog))) console.warn('duplicateitem for ', { id: this.idFromMark(markOrLog), markOrLog})
+  if (document.getElementById(this.idFromMark(markOrLog))) console.warn('duplicateitem for ', { id: this.idFromMark(markOrLog), markOrLog })
   return dg.div({
     style: {
       height: (expandedView ? null : (lister.dims[list].height + 'px')),
@@ -1591,18 +1546,75 @@ lister.titleOuter = function (expandedView) {
   })
 }
 lister.openOutside = function (url, options) {
+  const purl = pureUrlify(url)
+  const openTab = function (purl) { return vState.allTabs && vState.allTabs[purl] }
   return dg.div({
-    className: 'fa fa-external-link',
+    className:  openTab(purl) ? 'fa fa-folder-o' :  'fa fa-external-link',
     style: { float: 'right', color: 'cornflowerblue', 'font-size': '18px', margin: (options?.nomargin ? '' : '6px 0px 0px 5px'), cursor: 'pointer' },
     onclick: (e) => {
-      const left = window.screenLeft !== undefined ? window.screenLeft : window.screenX
-      const top = window.screenTop !== undefined ? window.screenTop : window.screenY
-      const height = window.innerHeight
-        ? window.innerHeight
-        : document.documentElement.clientHeight ? document.documentElement.clientHeight : screen.height
-      window.open(url, 'window', 'width=800, height=' + height + ',  left =' + (left + 500) + ', top=' + top + '')
+      if (openTab(purl)) {
+        const tabDetails = openTab(purl) // really should lookinto zSameTabs to find if tab in same window exists
+        chrome.windows.update(tabDetails.windowId, { focused: true }, (window) => {
+          chrome.tabs.update(tabDetails.id, { active: true })
+        })
+      } else if (options?.itemdiv && parseInt(options.itemdiv.parentElement?.style.marginRight) < 0) {
+        // for tabs - do nothing as card is collapsed
+      } else {
+        const left = window.screenLeft !== undefined ? window.screenLeft : window.screenX
+        const top = window.screenTop !== undefined ? window.screenTop : window.screenY
+        const height = window.innerHeight
+          ? window.innerHeight
+          : document.documentElement.clientHeight ? document.documentElement.clientHeight : screen.height
+        window.open(url, 'window', 'width=800, height=' + height + ',  left =' + (left + 500) + ', top=' + top + '')
+      }
     }
   })
+}
+lister.getRecentTabDataToUpdateState = async function () {
+  vState.allTabs = {}
+  const allTabDate = await vState.getRecentTabData()
+  allTabDate.currentTabs.forEach(tab => {
+    if (vState.allTabs[pureUrlify(tab.url)]) {
+      if (!vState.allTabs[pureUrlify(tab.url)].zSameTabs) vState.allTabs[pureUrlify(tab.url)].zSameTabs = []
+      vState.allTabs[pureUrlify(tab.url)].zSameTabs.push(tab)
+    } else {
+      vState.allTabs[pureUrlify(tab.url)] = tab
+    }
+  })
+  return allTabDate
+}
+
+lister.drawReferrerHistory = function (logItem) {
+  const refHistDiv = dg.div({ style: { display: 'none', color: 'grey' }, className: 'viaReferrer' })
+  let lastDiv = refHistDiv
+  let lastDomain = ''
+  const hist = logItem?.referrerHistory ? logItem.referrerHistory.slice().reverse() : (logItem?.referrer ? [{ refPurl: logItem?.referrer }] : [])
+
+  hist.forEach(item => {
+    const newDomain = domainAppFromUrl(item.refPurl)
+    if (lastDomain !== newDomain) {
+      const newDiv = dg.div({ style: { 'margin-left': '5px' } }, ' via ', dg.a({ href: item.refPurl, style: { } }, domainAppFromUrl(item.refPurl)))
+      lastDiv.appendChild(newDiv)
+      lastDiv = newDiv
+      lastDomain = newDomain
+    }
+  })
+
+  return refHistDiv
+
+  // return dg.div({
+  //   style: {
+  //     display: 'none',
+  //     height: '17px',
+  //     'text-overflow': 'ellipsis',
+  //     'white-space': 'nowrap',
+  //     'vertical-align': 'bottom',
+  //     color: MCSS.DARK_GREY
+  //   },
+  //   className: 'viaReferrer'
+  // },
+  // (logItem?.referrer?.trim() ? (dg.span(' via ', dg.a({ href: logItem.referrer, style: { color: 'grey' } }, logItem.referrer))) : ' ')
+  // )
 }
 lister.newDrawHighlights = function (purl, hLights, options) {
   // options: hLightCommentSaver, hLightDeleter, existingDiv, markOnBackEnd, markOnMarks, logToConvert (eg msgRecord)
@@ -1688,7 +1700,7 @@ lister.sharingDetailsSkeleton = function (purl, options) {
     SHARING_MENU_TYPES.forEach(type => menuDetails.appendChild(drawEmptySharingSubsection(type)))
   }
   outer.appendChild(menuDetails)
-  setTimeout(function () { 
+  setTimeout(function () {
     expandSection(summary, { height: '180px' })
     // need to set these as 'transitioned' doesnt get triggered when hidden
     summary.style.height = null
@@ -1823,16 +1835,16 @@ lister.makePublicShareButton = function (opts) {
       const buttonDiv = e.target
       buttonDiv.innerHTML = ''
       buttonDiv.appendChild(smallSpinner({ width: '15px', 'margin-top': '-4px', 'margin-bottom': '-4px' }))
-  // dg.img({
-  //       src: '/app_files/@public/info.freezr.public/public/static/ajaxloaderBig.gif',
-  //       style: { width: '15px', 'margin-top': '-4px', 'margin-bottom': '-4px' }
-  //     }))
-      const result = await onlineAction()
+      // dg.img({
+      //       src: '/app_files/@public/info.freezr.public/public/static/ajaxloaderBig.gif',
+      //       style: { width: '15px', 'margin-top': '-4px', 'margin-bottom': '-4px' }
+      //     }))
+      const result = await onlineAction(e)
       if (result?.error) {
         buttonDiv.innerHTML = buttonText || DEFAULTEXT
         buttonDiv.after(dg.div({ style: { color: 'red' } }, 'Sorry, Error: ' + (result?.error || 'unknown')))
       } else {
-        buttonDiv.style.display = 'none'
+        buttonDiv.parentElement.innerHTML = ' '
         if (callback) callback()
       }
       if (callback) callback()
@@ -1851,7 +1863,7 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
   if (!perms.isLoggedIn) {
     outer.appendChild(dg.span({ style: { color: 'darkgrey' } }, 'Connect to a freezr server to be able to share your bookmarks, notes and highlights. '))
     outer.appendChild(dg.a({ href: 'https://www.freezr.info' }, 'Cleck here to find out more about setting up a freezr server.'))
-    outer.appendChild(dg.div(dg.br(), dg.div({ style: { 'color': 'grey' } }, dg.span('If you already have a feezr server, log in '), dg.a({ href: '/main/settings.html' }, 'on the setting page.'))))
+    outer.appendChild(dg.div(dg.br(), dg.div({ style: { color: 'grey' } }, dg.span('If you already have a feezr server, log in '), dg.a({ href: '/main/settings.html' }, 'on the setting page.'))))
     return outer
   }
   outer.appendChild(dg.br())
@@ -1862,7 +1874,7 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
   const publicUrl = getPublicUrl(publicMark)
   const hrefCore = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: hrefCore +'/account/app/settings/cards.hiper.freezr' }, 'the link_share permission')))
+    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: hrefCore + '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission')))
   } else if (publicMark) {
     outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span(('Your bookmark was published.'), dg.a({ href: hrefCore + '/' + publicUrl }, 'You can find it here.'), dg.span(' Press the Public button for more options.'))))
   } else {
@@ -1911,7 +1923,7 @@ drawSharingSubsection._public = function (purl, options) {
   outer.setAttribute('shareType', '_public')
 
   if (!perms.havePublicPerm) {
-    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')  + '/account/app/settings/cards.hiper.freezr'
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/app/settings/cards.hiper.freezr'
     outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
     return outer
   }
@@ -1952,7 +1964,7 @@ drawSharingSubsection._public = function (purl, options) {
         buttonText: 'Republish',
         title: 'Republish the link',
         successText: 'You have re-published this!',
-        onlineAction: async function () {
+        onlineAction: async function (e) {
           try {
             // get item with isPublic from sharedMarks
             // todo check if there are multiple and if so delete
@@ -1968,7 +1980,7 @@ drawSharingSubsection._public = function (purl, options) {
             if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
             outer.innerHTML = ''
             outer.appendChild(dg.div(
-              dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was republished.'), 
+              dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was republished.'),
               dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + newMark._id, target: '_blank' }, 'You can find it here.')
             ))
             await refreshSharedMarksinVstateFor(purl)
@@ -2076,7 +2088,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
   const hrefCore = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')
 
   if (!perms.havePublicPerm) {
-    const href = hrefCore +  '/account/app/settings/cards.hiper.freezr'
+    const href = hrefCore + '/account/app/settings/cards.hiper.freezr'
     outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
     return outer
   }
@@ -2227,7 +2239,7 @@ drawSharingSubsection._privatefeed = function (purl, options) {
   outer.setAttribute('shareType', '_privatefeed')
 
   if (!perms.havePublicPerm || !perms.haveFeedPerm) {
-    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') +  '/account/app/settings/cards.hiper.freezr'
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/app/settings/cards.hiper.freezr'
     outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
     return outer
   }
@@ -2250,16 +2262,17 @@ drawSharingSubsection._privatefeed = function (purl, options) {
       if (!feedMark) {
         const button = lister.makePublicShareButton(
           {
-            title: 'Post bookmark to feed',
-            buttonText: 'Post to ' + feedName,
-            onlineAction: async function () {
+            title: 'Post bookmark to feed: ' + feedName,
+            buttonText: 'Post', //  + ,
+            onlineAction: async function (e) {
+              const buttonHolder = button.parentElement
               try {
-                const buttonHolder = button.parentElement
-                buttonHolder.innerHTML = ''
-
                 const markCopy = convertMarkToSharable((mark || getMarkFromVstateList(purl, { excludeHandC: true })), { excludeHlights: !mark })
                 if (!markCopy) throw new Error('No mark or log to convert')
                 markCopy.isPublic = false
+                if (buttonHolder.parentElement.querySelector('.vulog_overlay_input').innerText) markCopy.vComments = [{ text: buttonHolder.parentElement.querySelector('.vulog_overlay_input').innerText, vCreated: new Date().getTime() }]
+                console.warn('to publish', { markCopy })
+
                 // deal with case of crashing here - isPublic is true but it is not shared.
                 const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
                 if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
@@ -2267,38 +2280,47 @@ drawSharingSubsection._privatefeed = function (purl, options) {
 
                 const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
                 vState.sharedmarks.lookups[purl].push(createRet)
+
                 const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + ('/public?feed=' + feedName + '&code=' + shareRet.privateFeedCode)
-                buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href }, 'feed!')))
+                buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href }, feedName + '!')))
                 await refreshSharedMarksinVstateFor(purl)
-                outer.setAttribute('vStateChanged', 'true') 
+                outer.setAttribute('vStateChanged', 'true')
                 return shareRet
               } catch (e) {
-                outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'There was an error posting the link. Please try again.'))
+                buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'There was an error posting the link. Please try again.'))
                 console.warn('caught err in online action', { e })
                 return { error: e?.error }
               }
             }
           }
         )
-        button.style.width = '150px'
-        const holder = dg.div({ style: { display: 'grid', 'grid-template-columns': '1fr 180px' } })
-        holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, feedName + ':'))
-        holder.appendChild(dg.div({ style: { 'text-align': 'right' } }, button))
+        button.style.width = '50px'
+        const holder = dg.div({ style: { display: 'grid', 'grid-template-columns': '1fr 70px' , 'border-bottom': '1px solid grey'} })
+        holder.appendChild(dg.div({ style: { 'font-weight': 'bold' } }, feedName + ':'))
+        holder.appendChild(dg.div({ style: { 'font-weight': 'bold' } }, ' '))
+        const box = overlayUtils.editableBox({ placeHolderText: 'Enter comments' }, async function (e) { })
+        box.style['max-height'] = '100px'
+        holder.appendChild(box)
+        holder.appendChild(dg.div({ style: { 'margin-top': '2px' } }, button))
         feedDiv.appendChild(holder)
       } else { // feedMark exists
         const updateButt = lister.makePublicShareButton({
-          buttonText: 'Post again',
+          buttonText: 'Update',
           title: 'Post link again to ' + feedName,
-          onlineAction: async function () {
+          onlineAction: async function (e) {
+            const section = e.target.parentElement.parentElement
             const buttonHolder = updateButt.parentElement
             try {
+              feedMark.vComments = []
+              if (section.querySelector('.vulog_overlay_input').innerText) feedMark.vComments = [{ text: section.querySelector('.vulog_overlay_input').innerText, vCreated: new Date().getTime() }]
               const updateRet = await freepr.feps.update(feedMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
-              buttonHolder.innerHTML = ''
+              // buttonHolder.innerHTML = ' '
+              buttonHolder.previousSibling.innerHTML = ' ' 
 
               if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
               const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
               if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
-              buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Reposted!!'))
+              buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Reposted tp feed!!'))
               await refreshSharedMarksinVstateFor(purl)
               outer.setAttribute('vStateChanged', 'true')
               return shareRet
@@ -2317,15 +2339,16 @@ drawSharingSubsection._privatefeed = function (purl, options) {
             const buttonHolder = deleteButt.parentElement
             try {
               if (!feedMark) throw new Error('No public mark found')
-              buttonHolder.innerHTML = ''
+              // buttonHolder.innerHTML = ' '
+              buttonHolder.nextSibling.innerHTML = ' ' 
               const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
               if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
               const deleteRet = await freepr.feps.delete(feedMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
               if (!deleteRet || deleteRet.error) throw new Error('Error sharing: ' + (deleteRet?.error || 'unknown'))
               if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
               if (deleteRet.success) {
-                buttonHolder.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Removed!'))
-                buttonHolder.nextSibling.innerHTML = ''
+                buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Removed from feed!'))
+                // buttonHolder.nextSibling.innerHTML = ''
                 // remove deleted item from state:
                 await refreshSharedMarksinVstateFor(purl)
                 outer.setAttribute('vStateChanged', 'true')
@@ -2339,10 +2362,19 @@ drawSharingSubsection._privatefeed = function (purl, options) {
           }
         })
 
-        const holder = dg.div({ style: { display: 'grid', 'grid-template-columns': '1fr 1fr 1fr' } })
+        const holder = dg.div({ style: { display: 'grid', 'grid-template-columns': '1fr 70px 70px' } })
         holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, feedName + ':'))
-        holder.appendChild(dg.div({ style: { 'text-align': 'right' } }, deleteButt))
-        holder.appendChild(dg.div({ style: { 'text-align': 'right' } }, updateButt))
+        holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, ' '))
+        holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, ' '))
+        const box = overlayUtils.editableBox({ placeHolderText: 'Enter comments' }, async function (e) { })
+        box.style['max-height'] = '100px'
+        if (feedMark.vComments && feedMark.vComments.length > 0) box.innerText = feedMark.vComments[0].text
+        holder.appendChild(box)
+        updateButt.style.width = '50px'
+        deleteButt.style.width = '50px'
+
+        holder.appendChild(dg.div({ style: { 'margin-top': '2px' } }, deleteButt))
+        holder.appendChild(dg.div({ style: { 'margin-top': '2px' } }, updateButt))
         feedDiv.appendChild(holder)
       }
       outer.appendChild(feedDiv)
@@ -2359,14 +2391,14 @@ drawSharingSubsection._messages = function (purl, options) {
   if (!perms.haveMessagingPerm || !perms.haveContactsPerm) {
     const innerPerms = dg.span()
     if ((!perms.haveMessagingPerm && perms.haveContactsPerm) || (perms.haveMessagingPerm && !perms.haveContactsPerm)) innerPerms.innerText = 'You have only granted one of the two permissions'
-    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') +  '/account/app/settings/cards.hiper.freezr'
+    const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/app/settings/cards.hiper.freezr'
     outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href }, 'Press here to grant   permissions.')))
     return outer
   }
 
   if (!vState.friends || vState.friends.length === 0) {
     const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/contacts'
-    outer.appendChild(dg.div(dg.span('You have no contacts. ;( ...'), dg.a({ href }, 'Press here to add contacts..')))
+    outer.appendChild(dg.div(dg.span('You have no contacts. ;( .'), dg.a({ href }, 'Add contacts on your server..')))
   } else {
     overlayUtils.setUpMessagePurlWip(purl)
 
@@ -2511,7 +2543,9 @@ lister.filterItemsInMainDivOrGetMore = async function (source) {
 
   const { newShownNum, unShownItemRemain } = lister.showHideCardsBasedOnFilters[list](newShowTotal, source)
 
-  if (unShownItemRemain || newShownNum > vState.shownNum) {
+  if (vState.loadState.gotAll) {
+    lister.endCard.showNoMore()
+  } else if (unShownItemRemain || newShownNum > vState.shownNum) {
     setTimeout(() => { lister.endCard.showMore() }, 300)
     // doNothing - more button should work
   } else if (vState.loadState.autoTries < MAX_AUTO_INCREMENTS) {
@@ -2655,7 +2689,9 @@ lister.showHideCardsBasedOnFilters = {
       if (item && !item.vSearchString) item.vSearchString = resetVulogKeyWords(item)
       fits = lister.fitsWordSearchCriteria(item?.vSearchString, queryParams.words)
       if (fits) {
-        if (queryParams.date && (item.vCreated || item._date_created) > queryParams.date.getTime()) fits = false
+        if (queryParams.date &&
+          (item.vCreated || item._date_created) > queryParams.date.getTime()
+        ) fits = false
       }
       return fits
     }
@@ -2667,22 +2703,38 @@ lister.showHideCardsBasedOnFilters = {
     const { unfilteredItems, filteredItems } = vState.history
     const items = [...filteredItems, ...unfilteredItems]
     // const items = unfilteredItems.concat(filteredItems)
-    let counter = 0
-    items.forEach(item => {
-      const cardDiv = document.getElementById(lister.idFromMark(item)) // 'vitem_id_' + item._id) 
+    items.forEach((item) => {
+      const cardDiv = document.getElementById(lister.idFromMark(item)) // 'vitem_id_' + item._id)
+
       if (cardDiv) {
         const doesFit = fitsCriteria(item, vState.queryParams)
         const doShow = doesFit // 2024-08 remvoed concept as new hostry view can't NOT show
+        if (!doesFit) console.warn('item not fit ' + item.purl)
         if (doShow) newShownNum++
         const options = { list: 'history' }
-        if (!doShow) options.uncollpasePrevious = true  
+        // if (!doShow) options.uncollpasePrevious = true
         lister.showHideCard(cardDiv, doShow, options) // , { isFiltered, vCollapsible: item.vCollapsible })
-      } else {
-        // if (vState.tempUndrawnIds.indexOf(item._id) < 0)console.warn('SNB - item not shown ', { counter, item })
-        console.warn('SNB - item not shown ' + lister.idFromMark(item), { counter, item })
-      }
-      counter++
+      } // else {console.warn('SNB - item not shown ', lister.idFromMark(item), item) }
     })
+
+    // remvoe outer cards
+    const outer = dg.el('vulogRecords').firstChild
+    for (const historyOuter of outer.children) {
+      if (historyOuter.className === 'widthFlexGridOuter') {   // ie exclude endcard
+        let hasVisible = false
+        let lastVisible = null
+        for (const historyCard of historyOuter.children) {
+          if (historyCard.style.display !== 'none' && historyCard.firstChild.id.indexOf('vitem_') === 0 && historyCard.firstChild?.style?.transform === 'rotateY(0deg)') {
+            hasVisible = true
+            lastVisible = historyCard.firstChild
+          }
+        }
+        historyOuter.style.display = hasVisible ? '' : 'none'
+        historyOuter.style['min-height'] = hasVisible ? '235px' : '0px'
+        if (lastVisible) lister.setCardAsCollapsible(lastVisible, false, { list: 'history' })
+      }
+    }
+
     return { newShownNum, unShownItemRemain: false }
   },
   tabs: function () {
@@ -2700,8 +2752,8 @@ lister.showHideCardsBasedOnFilters = {
     let typeCounter = 0
     vState.tabs.forEach(windowType => { // [openWindows, closedWindows]
       typeCounter++
-      for (let [windowId, tabObjects] of Object.entries(windowType)) {
-        for (let [tabId, tabObject] of Object.entries(tabObjects)) {
+      for (const [windowId, tabObjects] of Object.entries(windowType)) {
+        for (const [tabId, tabObject] of Object.entries(tabObjects)) {
           tabObject.tabHistory.reverse().forEach((logItem, i) => {
             const cardDiv = dg.el(lister.idFromMark(logItem)) // 'vitem_id_' + item._id)
             if (cardDiv) {
@@ -2774,7 +2826,6 @@ lister.showHideCardsBasedOnFilters = {
 }
 lister.showHideCard = function (cardDiv, doShow, options) {
   // options: isFiltered vCollapsible
-  // console.log('show hide ', { list: options?.list, doShow })
   const parent = cardDiv.parentElement
   if (vState.viewType === 'fullHeight') {
     parent.style.height = doShow ? '100%' : '0'
@@ -2782,28 +2833,26 @@ lister.showHideCard = function (cardDiv, doShow, options) {
     parent.style.width = doShow ? (lister.dims[options.list].width + 'px') : '0'
     parent.style.padding = (doShow && options?.list !== 'tabs') ? '10px' : '0'
   }
+  if (doShow && options?.list === 'history') parent.style['padding-left'] = '0px'
   // parent.style.margin = doShow ? '15px' : '0'
 
-  if (options?.list === 'history' || options?.list === 'tabs' ) {
+  if (options?.list === 'history' || options?.list === 'tabs') {
     if (options?.list === 'history') {
       if (doShow) {
-        expandSection(parent, { height: lister.dims.history.height})
+        expandSection(parent, { height: lister.dims.history.height })
       } else {
         setTimeout(() => { collapseIfExpanded(parent) }, 100)
       }
     }
-    const shouldCollpase = (parent.getAttribute('vCollapsible') && (options?.list !== 'tabs' || !(vState.queryParams.words)))
-    // if (shouldCollpase && options?.list === 'tabs') parent.style.padding = '0'
-    lister.setCardAsCollapsible(cardDiv, (doShow && shouldCollpase), options)
+    const shouldCollpase =
+      parent.getAttribute('vCollapsible') &&
+      (options?.list !== 'tabs' || !vState.queryParams.words)
+    lister.setCardAsCollapsible(cardDiv, doShow && shouldCollpase, options)
     if (!doShow) cardDiv.parentElement.style['margin-right'] = 0
-    // if (!doShow && options?.uncollpasePrevious) { // uncollpase a card if the card in front of it has been filtered out
-    //   const prevCardParent = parent.previousSibling
-    //   if (prevCardParent && prevCardParent.getAttribute('vCollapsible') && prevCardParent.style.width !== '0px') lister.setCardAsCollapsible(prevCardParent.firstChild, false, options)
-    // }
   }
 
   // orginal version
-  // const shouldCollpase = (parent.getAttribute('vCollapsible')) 
+  // const shouldCollpase = (parent.getAttribute('vCollapsible'))
   //   if (doShow && shouldCollpase) lister.setCardAsCollapsible(cardDiv, true, options)
   //   if (!doShow && options?.uncollpasePrevious) { // uncollpase a card if the card in front of it has been filtered out
   //     const prevCardParent = parent.previousSibling
@@ -2826,14 +2875,21 @@ lister.showHideCard = function (cardDiv, doShow, options) {
   } else {
     cardDiv.style.transform = doShow ? 'rotateY(0deg)' : 'rotateY(90deg)'
   }
-  
 }
 lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   const parent = cardDiv.parentElement
   cardDiv.style.transition = 'all 1.0s ease-out'
   if (options?.list === 'history') cardDiv.style['background-color'] = doSet ? 'lightgrey' : 'white'
 
-  parent.style['margin-right'] = doSet ? ('-' + ((lister.dims[options.list].widthForCollpasing || lister.dims[options.list].width) - 10) + 'px') : '15px'
+  parent.style['margin-right'] = doSet
+    ? '-' +
+      ((lister.dims[options.list].widthForCollpasing ||
+        lister.dims[options.list].width) -
+        10) +
+      'px'
+    : options.list === 'history'
+      ? '3px'
+      : '15px'
 
   const extlink = cardDiv.querySelector('.fa-external-link')
   if (extlink) extlink.style.display = doSet ? 'none' : 'inline-block'
@@ -2849,8 +2905,13 @@ lister.setCardAsCollapsible = function (cardDiv, doSet, options) {
   })
 
   const titleDiv = cardDiv.querySelector('.vulog_title_url')
+  if (!titleDiv) console.warn('no titleDiv', { cardDiv })
+  // if (!titleDiv) return
+
   titleDiv.style.transition = 'all 0.5s ease-out'
-  titleDiv.style.width = doSet ? ((lister.dims[options.list].height - 30) + 'px') : null
+  titleDiv.style.width = doSet
+    ? lister.dims[options.list].height - 30 + 'px'
+    : null
   titleDiv.style.height = doSet ? '16px' : '30px'
   titleDiv.style.transform = doSet ? 'rotate(90deg)' : 'rotate(0deg)'
   titleDiv.style['transform-origin'] = 'left'
@@ -2977,11 +3038,11 @@ lister.resetDatesForList = function (list) {
   const mergedList = [...statsObject.unfilteredItems, ...statsObject.filteredItems]
   statsObject.dates.oldestModified = mergedList.reduce((acc, item) => Math.min((item?._date_modified || item?.fj_modified_locally || new Date().getTime()), acc), new Date().getTime())
   if (isNaN(statsObject.dates.oldestModified)) console.warn('Got a NaN for oldestModified', JSON.stringify(mergedList))
-    statsObject.dates.newestModified = mergedList.reduce((acc, item) => Math.max((item?._date_modified || item?.fj_modified_locally || 0), acc), 0)
+  statsObject.dates.newestModified = mergedList.reduce((acc, item) => Math.max((item?._date_modified || item?.fj_modified_locally || 0), acc), 0)
   if (isNaN(statsObject.dates.newestModified)) console.warn('Got a NaN for newestModified', JSON.stringify(mergedList))
   statsObject.dates.oldestCreated = mergedList.reduce((acc, item) => Math.min((item?.vCreated || item?._date_created || new Date().getTime()), acc), new Date().getTime())
   if (isNaN(statsObject.dates.oldestCreated)) console.warn('Got a NaN for oldestCreated', JSON.stringify(mergedList))
-  }
+}
 lister.getMoreAndUpdateCountStatsFor = async function (list) {
   // onsole.log(' getMoreAndUpdateCountStatsFor')
   // this should only be used in getMoreItems or for marks, as it doesnt add the hasmarks key to the record
@@ -2993,19 +3054,29 @@ lister.getMoreAndUpdateCountStatsFor = async function (list) {
   const SEARCHCOUNT = 100
   // let oldestModified = statsObject.dates.oldestModified
   // if (statsObject.filteredItems.length > 0) oldestModified = [... statsObject.unfilteredItems, ... statsObject.filteredItems].reduce((acc, item) => Math.min((item?._date_modified || item?.fj_modified_locally || new Date().getTime()), acc), statsObject.dates.oldestModified)
-  
+
   // logic needs to be that this is reset when filtered items are..
 
   if (vState.loadState.gotAll) console.warn('SNBH - gotAll was marked so why fetched more?')
   if (vState.loadState.gotAll) return []
 
-  const { newItems, typeReturned } = await vState.environmentSpecificGetOlderItems(list, { getCount: SEARCHCOUNT, dates: statsObject.dates, queryParams: lister.getQueryParams(), gotCount: statsObject.unfilteredItems.length, alreadyGotFIlteredItems: (statsObject.filteredItems.length > 0) }) // gotCount no longer needed??
+  const { newItems, typeReturned } =
+    await vState.environmentSpecificGetOlderItems(list, {
+      getCount: SEARCHCOUNT,
+      dates: statsObject.dates,
+      queryParams: lister.getQueryParams(),
+      gotCount: statsObject.unfilteredItems.length,
+      alreadyGotFIlteredItems: statsObject.filteredItems.length > 0
+    }) // gotCount no longer needed??
   // onsole.log('getMoreAndUpdateCountStatsFor newItems', {newItems, typeReturned, dates: statsObject.dates })
   // environmentSpecificGetOlderItems judges whether to return unfiltered or filtered items -
   // ideally a number of unfiltered items are returned so graphics can be nade nice.. adn then the filtered items are retirned so asd to make search more efficient
 
-  if (['history', 'marks', 'sentMsgs', 'gotMsgs', 'publicmarks'].indexOf(list) > -1) {
-    statsObject.gotCount += (newItems?.length || 0)
+  if (
+    ['history', 'marks', 'sentMsgs', 'gotMsgs', 'publicmarks'].indexOf(list) >
+    -1
+  ) {
+    statsObject.gotCount += newItems?.length || 0
 
     if (typeReturned === 'unfilteredItems' || typeReturned === 'filteredItems') {
       statsObject[typeReturned] = [...statsObject[typeReturned], ...newItems]
@@ -3230,6 +3301,22 @@ lister.dragElement = function (elmnt) {
     document.ontouchmove = null
   }
 }
+lister.createSanitizedTitle = function (logItem) {
+  if (!logItem) return 'No title'
+  if (!logItem.title && !logItem.purl) return 'No info'
+
+  let urlText = logItem.title || logItem.purl.replace(/\//g, ' ').replace(/\>/g, ' ')
+  urlText+= (logItem.purl && (logItem.purl.indexOf('http') === 0 || logItem.purl.indexOf('chrome') === 0 ))? '' : ' - file' // (domainApp ? (domainApp + ': ') : '' ) + )
+  if (logItem.purl && logItem.purl.indexOf('chrome-extension') === 0 || urlText.indexOf('http') === 0) {
+    const oldUrl = urlText
+    urlText = ''
+    for (let i = 0; i < oldUrl.length; i++) {
+      urlText += (oldUrl.charAt(i) + String.fromCharCode(8203)) // '&#8203')
+    }
+    
+  }
+  return urlText
+}
 // time and scoll for logItems
 const scrolledPercent = function (alog) {
   if (alog.vuLog_height && alog.vulog_max_scroll && !isNaN(alog.vuLog_height) && !isNaN(alog.vulog_max_scroll)) {
@@ -3251,15 +3338,41 @@ const timeSpentOn = function (alog) {
   })
   return timeSpent
 }
+const firstLastDays = function (alog) {
+  const visitDetails = alog.vulog_visit_details
+  if (!visitDetails || visitDetails.length === 0) return { minValue: null, maxValue: null }
+  const { minValue, maxValue } = visitDetails.reduce(
+    (acc, obj) => ({
+      minValue: Math.min(acc.minValue, (obj.start || Infinity)),
+      maxValue: Math.max(acc.maxValue, (obj.mid || obj.end || -Infinity))
+    }),
+    { minValue: Infinity, maxValue: -Infinity }
+  )
+  if (minValue === Infinity || maxValue === -Infinity) return { minValue: null, maxValue: null }
+  return { minValue, maxValue }
+}
 const timePrettify = function (aTime) {
   if (!aTime) return ''
   return (Math.floor(aTime / 60000) > 0 ? (Math.floor(aTime / 60000) + 'mins ') : '') + (Math.round((aTime % 60000) / 1000, 0)) + 's'
+}
+const dayPrettify = function (aDay) {
+  const date = new Date(aDay)
+  return date.toDateString().slice(4)
 }
 const timeAndScrollString = function (alog) {
   const scrolled = percentString(scrolledPercent(alog))
   const time = timePrettify(timeSpentOn(alog))
   if (!scrolled && !time) return ' '
-  return 'Viewed ' + (scrolled ? (scrolled + (time ? ', ' : '')) : ' ') + (time ? ('for ' + time) : '')
+  const { minValue, maxValue } = firstLastDays(alog)
+  const days = (!minValue || !maxValue) ? '' : ((sameDay(minValue, maxValue)) ? (' on ' + dayPrettify(minValue)) : (' (' + dayPrettify(minValue) + ' - ' + dayPrettify(maxValue) + ')'))
+  return 'Viewed ' + (scrolled ? (scrolled + (time ? ', ' : '')) : ' ') + (time ? ('for ' + time) : '') + days
+}
+const sameDay = function (dateNum1, dateNum2) {
+  const d1 = new Date(dateNum1)
+  const d2 = new Date(dateNum2)
+  return d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
 }
 
 // uunused

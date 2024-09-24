@@ -118,7 +118,7 @@ body {
 }
 #tabInner{
   overflow-x: wrap;
-  overflow-y:scroll;
+  overflow-y:auto;
   font-size: 12px;
   background-color: white;
   border-radius: 5px;

@@ -82,6 +82,33 @@ const assignDateTextFromCreatedDate = (item) => {
   return item
 }
 
+const mergeHistoryItems = function (item1, item2) {
+  if (!item1) return item2
+  if (!item2) return item1
+  if (!item1._otherIds) item1._otherIds = [item1._id || item1.fj_modified_locally]
+  if (!item2._otherIds) item2._otherIds = [item2._id || item2.fj_modified_locally]
+  item1._otherIds = [...item1._otherIds, ...item2._otherIds]
+
+  item1.vCreated = Math.min(item1.vCreated, item2.vCreated)
+  item1.fj_modified_locally = Math.max(item1.fj_modified_locally || 0, item2.fj_modified_locally || 0)
+  if (!item1.referrerHistory || item1.referrerHistory.length === 0) {
+    item1.referrerHistory = item2.referrerHistory
+  } else {
+    if (!item2.referrerHistory) item2.referrerHistory = []
+    item1.referrerHistory = [...item1.referrerHistory, ...item2.referrerHistory]
+    // console.log - really should merge these by removing non-uniques
+  }
+  if (!item1.vulog_visit_details || item1.vulog_visit_details.length === 0) {
+    item1.referrerHistory = item2.vulog_visit_details
+  } else {
+    if (!item2.vulog_visit_details) item2.vulog_visit_details = []
+    item1.vulog_visit_details = [...item1.vulog_visit_details, ...item2.vulog_visit_details]
+  }
+  if (item1.rootTP && item2.rootTP && item1.rootTP !== item2.rootTP) console.warn('danger - merging two items with different roots ', { item1, item2 })
+  if (item1.tabid && item2.tabid && item1.tabid !== item2.tabid) console.warn('danger - merging two items with different tabids ', { item1, item2 })
+
+  return item1
+}
 const LOG_FIELDS_USED_IN_MARKS = ['url', 'purl', 'description', 'domainApp', 'title', 'author', 'image', 'keywords', 'type', 'vulog_favIconUrl', 'vulog_max_scroll', 'vSearchString', 'vCreated', 'referrer']
 const convertLogToMark = function (logtomark, options) {
   if (!logtomark) return null
@@ -505,11 +532,6 @@ const overlayUtils = {
     if (!mark) mark = convertLogToMark(options?.log || { purl })
     const stardiv = document.createElement('div')
     const MAIN_STARS = ['bookmark', 'star', 'inbox', 'trash']
-    const addDefaultHashTag = (options?.defaultHashTag && options.notesDivForHashtag && options.notesDivForHashtag.textContent === '')
-      ? ('#' + options?.defaultHashTag)
-      : ''
-    options.addDefaultHashTag = addDefaultHashTag
-    // if (!options.markOnBackEnd) options.markOnBackEnd = markOnBackEndForExtenstion
 
     MAIN_STARS.forEach(aStar => {
       if (aStar === 'trash' && !options.drawTrash) {
@@ -569,6 +591,8 @@ const overlayUtils = {
     // options: defaultHashtag, notesDivForHashtag, logToConvert
     // showBookmark: bool, drawTrash: bool, trashFloatHide bool, markOnBackEnd: function
     // if (!mark && !options?.logToConvert) console.warn('cannot draw stars without mark or log: ', { mark, options })
+    
+
     const isMarked = Boolean(mark?._id)
     const purl = mark?.purl || options?.purl || options?.log?.purl
     if (!mark & !options?.log) console.warn('no mark or log in drawstars ', { options })
@@ -577,7 +601,6 @@ const overlayUtils = {
       ? ('#' + options?.defaultHashTag)
       : ''
     options.addDefaultHashTag = addDefaultHashTag
-    // if (!options.markOnBackEnd) options.markOnBackEnd = markOnBackEndForExtenstion
 
     const adiv = this.makeEl('div', null, 'vulog_overlay_stars')
     adiv.innerContent = ' '
@@ -609,6 +632,8 @@ const overlayUtils = {
       const starWasChosen = (parts.length > 3 && parts[3] === 'ch')
       thediv.className = 'vulog_overlay_spiral'
 
+      // showWarning
+
       try {
         const response = await options.markOnBackEnd(mark, options, theStar, starWasChosen, addDefaultHashTag)
         if (response && response.success && theStar === 'trash') {
@@ -616,6 +641,8 @@ const overlayUtils = {
         } else if (response && response.success) {
           thediv.className = ('vulog_overlay_' + theStar + (starWasChosen ? '_nc' : '_ch'))
           if (addDefaultHashTag) options.notesDivForHashtag.textContent = addDefaultHashTag
+        } else if (response.keepAsIs) {
+          thediv.className = ('vulog_overlay_' + theStar + (starWasChosen ? '_ch':  '_nc' ))
         } else {
           console.error('could not connect to toggle mark - handle error')
         }
@@ -687,7 +714,6 @@ const overlayUtils = {
     // todo and check -> does this work with converting log to mark
     if (!options.mainNoteSaver) {
       options.mainNoteSaver = async function (mark) {
-        console.log('saving from DEFAULT main notes box saver')
         const purl = mark.purl
         const id = mark?._id // Should be different if it is a log ?
         const msg = 'saveMainComment'
@@ -735,11 +761,11 @@ const overlayUtils = {
     if (!options) options = {}
     // if (!options.markOnBackEnd) options.markOnBackEnd = markOnBackEndForExtenstion
 
-    const deleteButtOuter = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'left', padding: '10px' })
+    const deleteButtOuter = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'center', padding: '10px', display: 'none' })
     const deleteButt = overlayUtils.makeEl('div', null, 'quote_delete', 'Remove Highlight')
     if (!options.hLightDeleter) {
       options.hLightDeleter = async function (hLight, mark, options) {
-        const response = await chrome.runtime.sendMessage({ msg: 'removeHighlight', url: mark.purl, hlightId: hLight.id, mark })
+        const response = await chrome.runtime.sendMessage({ msg: 'removeHighlight', url: purl, hlightId: hLight.id, mark })
         if (!response || !response.success) {
           // do nothing
         } else if (options?.showTwoLines) { // ie from overlay
@@ -758,7 +784,7 @@ const overlayUtils = {
     deleteButt.onclick = async function (e) {
       if (e.target.className.includes('quote_delete_confirm')) {
         // const hlightId = this.getAttribute('hlightId')
-        const response = await options.hLightDeleter(hLight, options?.mark, { button: e.target.parentElement.parentElement })
+        const response = await options.hLightDeleter(hLight, options?.markOnMarks, { button: e.target.parentElement.parentElement })
 
         e.target.parentElement.parentElement.style.color = 'red'
         e.target.parentElement.parentElement.style['text-align'] = 'center'
@@ -767,7 +793,11 @@ const overlayUtils = {
           e.target.parentElement.parentElement.innerHTML = 'Error'
           console.warn('Error trying to delete highlight (' + response.error + ')')
         } else {
-          e.target.parentElement.parentElement.innerHTML = 'REMOVED'
+          const parentEl = e.target.parentElement.parentElement
+          parentEl.innerHTML = 'REMOVED'
+          if (parentEl.nextSibling) parentEl.nextSibling.style.display = 'none'
+          if (parentEl.nextSibling?.nextSibling) parentEl.nextSibling.nextSibling.style.display = 'none'
+          // should refresh page if tab is showing
         }
       } else {
         setTimeout(() => {
@@ -808,13 +838,16 @@ const overlayUtils = {
     commentsOuter.append(overlayUtils.drawCommentsSection(purl, hLight, options))
     retDiv.append(commentsOuter)
 
+
     if (!options?.noThreeDots) {
       const threeDots = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'right', color: 'blue', 'font-size': '24px', 'margin-top': '-10px', 'margin-bottom': '5px' })
       const threeDotsInner = overlayUtils.makeEl('span', null, { 'margin-right': '10px', height: '20px', size: '40px', cursor: 'pointer', 'font-weight': 'bold' }, '...')
       threeDotsInner.onclick = function (e) {
         e.target.parentElement.nextSibling.style.display = 'block'
+        //  e.target.parentElement.nextSibling.nextSibling.style.display = 'block'
         e.target.parentElement.nextSibling?.firstChild?.firstChild?.focus()
         e.target.parentElement.style.display = 'none'
+        deleteButtOuter.style.display = 'block'
       }
       threeDots.append(threeDotsInner)
       retDiv.append(threeDots)
@@ -828,6 +861,9 @@ const overlayUtils = {
 
     notesBoxOuter.append(overlayUtils.drawHlightCommentsBox(purl, hLight, options))
     retDiv.append(notesBoxOuter)
+
+    commentsOuter.appendChild(deleteButtOuter)
+    
 
     const highlightOuter = options?.existingDiv || overlayUtils.makeEl('div', null, 'highlightOuter')
     if (hLight.sender_id) {
@@ -911,7 +947,7 @@ const overlayUtils = {
       outer.appendChild(notesDiv)
 
       if (!options.hLightCommentSaver) {
-        console.error('No hLightCommentSaver for ', { purl, hLight, options })
+        // console.error('No hLightCommentSaver for ', { purl, hLight, options })
         options.hLightCommentSaver = async function (hLight, text, options) { // purl, noteSaver
           // need to create mark if not exists
           if (!hLight || !text || (!options.purl && !options.mark)) return { error: true, msg: 'need hlight text to process' }
@@ -1434,16 +1470,24 @@ const overlayUtils = {
     const outer = existingDiv || emptyOuter
     outer.innerHTML = ''
 
-    vState.friends.forEach(f => {
-      if (f.username) {
-        const friendPict = overlayUtils.drawComplexFriend(f, purl)
-        const existing = wip.chosenFriends.find((f2) => f2.searchname === f.searchname)
-        if (existing) friendPict.style.background = 'purple'
-        outer.appendChild(friendPict)
-      } else if (f._date_created > 1709362100000) { // old bug
-        console.warn('empty friend found')
+    if (!vState.friends || vState.friends.length === 0) {
+      if (vState.freezrMeta?.serverAddress){
+        outer.appendChild(overlayUtils.makeEl('a', null, { href: vState.freezrMeta?.serverAddress +'/acount/contacts', padding: '5px' }, 'Add Friends'))
+      } else {
+        outer.appendChild(overlayUtils.makeEl('div', null, { padding: '5px' }, 'Error retrieving friends.'))
       }
-    })
+    } else {
+      vState.friends.forEach(f => {
+        if (f.username) {
+          const friendPict = overlayUtils.drawComplexFriend(f, purl)
+          const existing = wip.chosenFriends.find((f2) => f2.searchname === f.searchname)
+          if (existing) friendPict.style.background = 'purple'
+          outer.appendChild(friendPict)
+        } else if (f._date_created > 1709362100000) { // old bug
+          console.warn('empty friend found')
+        }
+      })
+    }
     return outer
   },
   drawComplexFriend: function (friend, purl, options) {
@@ -1493,7 +1537,10 @@ const overlayUtils = {
     outer.innerHTML = ''
     outer.style.height = 'auto'
     const wip = vState.messages.wip[purl]
-    if (wip.chosenFriends.length === 0) {
+    if (!vState.friends || vState.friends.length === 0) {
+      outer.appendChild(overlayUtils.makeEl('div', null, { padding: '5px' }, 'No friends found. refresh this page or...'))
+      outer.appendChild(overlayUtils.makeEl('a', null, { href: vState.freezrMeta?.serverAddress +'/acount/contacts', padding: '5px' }, 'Add or edit friends on your server.'))
+    } else if (wip.chosenFriends.length === 0) {
       outer.appendChild(overlayUtils.makeEl('div', null, { padding: '5px' }, 'Select a friend to send messages.'))
     } else {
       const recipients = overlayUtils.makeEl('div', null, { padding: '5px', color: 'purple' }, 'Send message to: ')
@@ -1578,6 +1625,8 @@ const appTableFromList = function (list) {
     case 'gotMsgs':
       return 'dev.ceps.messages.got'
     case 'history':
+      return 'cards.hiper.freezr.logs'
+    case 'logs':
       return 'cards.hiper.freezr.logs'
     default:
       return 'cards.hiper.freezr.marks'
@@ -1691,4 +1740,5 @@ if (utilsDummy) { // exported vars
   convertDownloadedMessageToRecord()
   mergeMessageRecords()
   convertListerParamsToDbQuery()
+  mergeHistoryItems()
 }

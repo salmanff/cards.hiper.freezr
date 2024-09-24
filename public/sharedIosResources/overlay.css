@@ -444,7 +444,7 @@
   border-radius: 2px;
   min-height: 12px;
   max-height:40%;
-  overflow-y: scroll;
+  overflow-y: auto;
   text-align: left;
   background-color: white;
   color: black;

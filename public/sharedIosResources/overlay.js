@@ -132,7 +132,7 @@ if (!isIos()) {
       //   overlay.appendChild(errDiv)
       // }
 
-      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'vulog'))
+      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'hiper.cards'))
 
       const aspan = overlayUtils.makeEl('span', 'vulog_overlay_cross_ch')
       aspan.onclick = vState.desktop_overlay.close
@@ -525,6 +525,10 @@ if (!isIos()) {
           } else {
             console.warn('markUpdated sent to page but purl is different??? snbh')
           }
+        } else if (request.msg === 'reloadPage') {
+          // console.log('WILL RELOIAD PAGE GIVEN RELOAD REQUEST') // currently not working ??
+          window.location.reload()
+          sendResponse({ success: true })
         }
         // 2023 - 06 -> not used?
         // if (request.action === 'highlight_selection') {
