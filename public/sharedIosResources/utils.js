@@ -1039,6 +1039,7 @@ const overlayUtils = {
 
     const oneComment = overlayUtils.makeEl('div', null, { 'margin-left': ((options?.isReceived || options?.noreply) ? '0px' : '20px') })
 
+    if (!vComment) console.warn('no message details for ', { vComment } )
     if (!vComment) return oneComment.appendChild(overlayUtils.makeEl('div', null, null, 'Error: No message details'))
 
     if (options?.isReceived || options?.addPerson) {
@@ -1328,8 +1329,10 @@ const overlayUtils = {
     } else if (numReceivedComments > 0) {
       outer.appendChild(overlayUtils.makeEl('div', null, { }, (numReceivedComments > 1 ? ('Last of ' + numReceivedComments + ' messages received:') : 'Received: ')))
     }
-    const inner = overlayUtils.oneComment(purl, lastReceivedComment, { isReceived: true, oneLiner: true })
-    outer.appendChild(inner)
+    if (lastReceivedComment) {
+        const inner = overlayUtils.oneComment(purl, lastReceivedComment, { isReceived: true, oneLiner: true })
+        outer.appendChild(inner)
+    }
 
     if (numSentComments > 0) {
       outer.appendChild(overlayUtils.makeEl('div', null, { }, (numSentComments > 1 ? ('Latest of ' + numSentComments + ' messages sent:') : 'Sent: ')))
