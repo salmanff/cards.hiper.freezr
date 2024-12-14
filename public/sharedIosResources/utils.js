@@ -193,6 +193,19 @@ const convertDownloadedMessageToRecord = function (downloadedMessage) {
   downloadedMessage.record.vCreated = downloadedMessage._date_created
 
   if (!downloadedMessage.record.vComments) downloadedMessage.record.vComments = [] // should not happen
+  structuredClone
+  if (!downloadedMessage.record.vComments || downloadedMessage.record.vComments.length === 0) {
+    console.warn('SNBH!!!! no vComments ', downloadedMessage)
+    downloadedMessage.record.vComments = []
+  } else {
+    // for (const vComment of MessageToMerge.record.vComments) {
+      downloadedMessage.record.vComments.forEach(vComment => {
+      vComment.recipients = structuredClone( downloadedMessage.recipients)
+      vComment.recipientStatus = structuredClone(downloadedMessage.recipientStatus)
+    })
+  }
+
+  
   if (downloadedMessage.record.vNote) { // legacy- to remove
     const vComment = vCommentFromOldVNoteMessage(downloadedMessage)
     downloadedMessage.record.vComments.push(vComment)
@@ -207,9 +220,14 @@ const convertDownloadedMessageToRecord = function (downloadedMessage) {
       hLightsCopy: JSON.parse(JSON.stringify(downloadedMessage.record.vHighlights))
     })
   }
+  
 
   downloadedMessage.record.vCreated = downloadedMessage.vCreated || downloadedMessage._date_modified
   downloadedMessage.record.vLatestMsg = downloadedMessage.vCreated || downloadedMessage._date_modified
+  // downloadedMessage.record.message_id = downloadedMessage._id
+  downloadedMessage.record.mark_read = downloadedMessage.mark_read
+  downloadedMessage.record.isSent = downloadedMessage.isSent
+  downloadedMessage.record.isGot = downloadedMessage.isGot
 
   return downloadedMessage.record // convertMessageToRecord(downloadedMessage.record)
 }
@@ -237,12 +255,23 @@ const mergeMessageRecords = function (masterRecord, MessageToMerge) {
     return masterRecord
   }
 
-  if (!MessageToMerge.record.vComments) MessageToMerge.record.vComments = []
+  if (!MessageToMerge.record.vComments || MessageToMerge.record.vComments.length === 0) {
+    console.warn('SNBH!!!! no vComments ', MessageToMerge)
+    MessageToMerge.record.vComments = []
+  } else {
+    // for (const vComment of MessageToMerge.record.vComments) {
+    MessageToMerge.record.vComments.forEach(vComment => {
+      vComment.recipients = structuredClone( MessageToMerge.recipients)
+      vComment.recipientStatus = structuredClone(MessageToMerge.recipientStatus)
+    })
+
+  }
   if (MessageToMerge.record.vHighlights && MessageToMerge.record.vHighlights.length > 0) {
     MessageToMerge.record.vHighlights = addMissingSendersToHLights(MessageToMerge.record.vHighlights, MessageToMerge)
     if (MessageToMerge.record.vComments.length === 1 && MessageToMerge.record.vComments[0].text === '' && MessageToMerge.record.vHighlights.length > 0) {
       MessageToMerge.record.vComments[0].hLightsCopy = JSON.parse(JSON.stringify(MessageToMerge.record.vHighlights))
     } else if (MessageToMerge.record.vComments.length === 0 && MessageToMerge.record.vHighlights.length > 0) {
+      console.warn('SNBH!!!! no vcommetns but highlights ', MessageToMerge)
       MessageToMerge.record.vComments.push({
         sender_id: MessageToMerge.sender_id,
         sender_host: MessageToMerge.sender_host,
@@ -655,7 +684,7 @@ const overlayUtils = {
   },
   drawSmallStars: function (mark) {
     const stardiv = document.createElement('div')
-    if (mark){
+    if (mark) {
       const ALL_STARS = ['bookmark', 'star', 'inbox', 'vNote', 'vHighlights']
       ALL_STARS.forEach(aStar => {
         const adiv = this.makeEl('div', null, null)
@@ -683,7 +712,7 @@ const overlayUtils = {
       })
       // stardiv.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, ' .. '))
     } else {
-      stardiv.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '0px', color: 'lightgrey' } }, ' Click to expand ... '))
+      // stardiv.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '0px', color: 'lightgrey' } }, ' Click to expand ... '))
     }
     
     stardiv.style.display = 'inline-block'
@@ -873,7 +902,7 @@ const overlayUtils = {
         markedDiv.className = 'vulog_overlay_bookmark_ch'
         highlightOuter.appendChild(markedDiv)
       }
-      const personDiv = hLight.sender_id ? overlayUtils.personOneLiner(hLight.sender_id, hLight.sender_host, true) : document.createElement('div')
+      const personDiv = hLight.sender_id ? overlayUtils.personOneLiner([{ recipient_id: hLight.sender_id, recipient_host: hLight.sender_host }], true) : document.createElement('div')
       highlightOuter.appendChild(personDiv)
     }
 
@@ -1014,7 +1043,7 @@ const overlayUtils = {
 
     if (options?.isReceived || options?.addPerson) {
       oneComment.setAttribute('personid', overlayUtils.fullSenderName(vComment))
-      oneComment.appendChild(overlayUtils.personOneLiner(vComment.sender_id, vComment.sender_host, options.isReceived, options))
+      oneComment.appendChild(overlayUtils.personOneLiner([{ recipient_id: vComment.sender_id, recipient_host: vComment.sender_host }],true, options))
 
       if (!options.noreply) {
         const replyButt = overlayUtils.makeEl('div', null, {
@@ -1024,7 +1053,8 @@ const overlayUtils = {
           margin: '5px',
           cursor: 'pointer'
         }, '')
-        replyButt.className = 'vulog_overlay_reply'
+        replyButt.className = 'vulog_overlay_reply' + ((vComment.recipients && vComment.recipients.length > 0) ? 'all' : '')
+
         replyButt.onclick = function (e) {
           replyButt.style.display = 'none'
           // remove previous ones - currently only sending one comment at a time
@@ -1039,7 +1069,10 @@ const overlayUtils = {
 
           overlayUtils.setUpMessagePurlWip(purl, options.hLight)
           vState.messages.wip[purl].text = ''
-          vState.messages.wip[purl].chosenFriends = [overlayUtils.tempFriendObjFrom(vComment.sender_id, vComment.sender_host)]
+          vState.messages.wip[purl].chosenFriends = [{ recipient_id: vComment.sender_id, recipient_host: vComment.sender_host }]
+          vComment.recipients.forEach(recipient => {
+            if (!overlayUtils.receipientIsUser(recipient)) vState.messages.wip[purl].chosenFriends.push(recipient)
+          })
           const messageSendingInterface = overlayUtils.drawMessageSendingInterface(purl, 'inlineReply', options.hLight)
           messageSendingInterface.style.height = '0px'
           e.target.parentElement.appendChild(messageSendingInterface)
@@ -1057,7 +1090,8 @@ const overlayUtils = {
       }
     } else {
       oneComment.setAttribute('personid', overlayUtils.fullRecipientName(vComment))
-      oneComment.appendChild(overlayUtils.personOneLiner(vComment.recipient_id, vComment.recipient_host, options.isReceived))
+      // oneComment.appendChild(dg.span(' notRec ' + JSON.stringify(vComment.recipients)))
+      oneComment.appendChild(overlayUtils.personOneLiner(vComment.recipients, false))
     }
     const textBox = overlayUtils.makeEl('div', null, {
       color: (options.isReceived ? MCSS.PURPLE : 'white'),
@@ -1066,9 +1100,9 @@ const overlayUtils = {
       padding: (vComment.text ? '3px' : '0px 3px'),
       'border-radius': '3px',
       'margin-right': ((options.isReceived && !options?.noreply) ? '40px' : '0px'),
-    }, vComment.text || ((vComment.hLightsCopy && vComment.hLightsCopy.length > 0 &&  vComment.hLightsCopy[0].vComments && vComment.hLightsCopy[0].vComments.length > 0 && vComment.hLightsCopy[0].vComments[0].text) ?  vComment.hLightsCopy[0].vComments[0].text : null) || ' ')
+    }, vComment.text || ((vComment.hLightsCopy && vComment.hLightsCopy.length > 0 && vComment.hLightsCopy[0].vComments && vComment.hLightsCopy[0].vComments.length > 0 && vComment.hLightsCopy[0].vComments[0].text) ?  vComment.hLightsCopy[0].vComments[0].text : null) || ' ')
     //  vComment.hLightsCopy[0].string should be function grabbing first comment in highlight
-    if (vComment.text == ' ') textBox.border = '1px solid purple'
+    if (vComment.text === ' ') textBox.border = '1px solid purple'
     if (options?.maxHeight) {
       textBox.style['max-height'] = options.maxHeight
       textBox.style.overflow = 'hidden'
@@ -1107,18 +1141,24 @@ const overlayUtils = {
     oneComment.appendChild(bottomLine)
     return oneComment
   },
+  receipientIsUser: function (recipient) {
+    return (recipient.recipient_id === vState.freezrMeta.userId &&
+      (!recipient.recipient_host || recipient.recipient_host === vState.freezrMeta.serverAddress))
+  },
   // messaging -> // todo - why use wip?
   drawMessageSendingInterface: function (purl, from, hLight) {
     overlayUtils.setUpMessagePurlWip(purl, hLight)
     const wip = vState.messages.wip[purl]
     const outer = overlayUtils.makeEl('div', null, { display: 'grid', 'grid-template-columns': '1fr 40px' })
     outer.className = 'messageSendingInterface_' + from
+
     const messageBox = overlayUtils.editableBox({
       placeHolderText: ((from === 'mainInterface') ? 'Enter a message before sending' : ' Enter reply')
     }, async function (e) {
       wip.text = e.target.innerText
       if (e.key === 'Enter') {
         e.preventDefault()
+        wip.text = e.target.innerText.slice(0, -1)
         await sendMessageAndRedraw(purl, outer, from)
       }
     })
@@ -1147,7 +1187,7 @@ const overlayUtils = {
       sendOuter.appendChild(SendInner)
       outer.appendChild(sendOuter)
     } else { // from === 'inlineReply'
-      const sendButt = overlayUtils.makeEl('div', null, { zoom: '60%', cursor: 'pointer', margin: '-10px 15px 0px 10px' })
+      const sendButt = overlayUtils.makeEl('div', null, { zoom: '80%', cursor: 'pointer', margin: '-10px 15px 0px 10px' })
       sendButt.className = 'vulog_overlay_send'
       sendButt.onclick = clickSendMessage
 
@@ -1156,6 +1196,14 @@ const overlayUtils = {
       outer.style['margin-bottom'] = '40px'
       outer.appendChild(messageBox)
       outer.appendChild(sendButt)
+      if (vState.messages.wip[purl].chosenFriends.length > 1) {
+        let othersText = 'Send meesage to: '
+        vState.messages.wip[purl].chosenFriends.forEach(recipient => {
+          if (!overlayUtils.receipientIsUser(recipient)) othersText += overlayUtils.fullRecipientName(recipient) + ', '
+        })
+        othersText = othersText.slice(0, -2) + '.'
+        outer.appendChild(overlayUtils.makeEl('div', null, { color: 'grey', 'font-size': '9px', padding: '3px' }, othersText))
+      }
     }
 
     const sendMessageAndRedraw = async function (purl, outer, from) {
@@ -1167,13 +1215,12 @@ const overlayUtils = {
       markCopy._id = null
 
       const { successFullSends, erroredSends } = await vState.environmentSpecificSendMessage({ chosenFriends, text, hLight, markCopy })
-      // await sendMessage({ chosenFriends, text, hLight, markCopy })
-
-      if (erroredSends && erroredSends.length === 0) {
-        delete vState.messages.wip[purl]
-      } else if (erroredSends && erroredSends.length > 0) {
-        vState.messages.wip[purl].chosenFriends = erroredSends
-      }
+      // onsole.log({ chosenFriends, successFullSends, erroredSends })
+      
+      delete vState.messages.wip[purl]
+      // if (erroredSends && erroredSends.length === 0) { delete vState.messages.wip[purl] } else if (erroredSends && erroredSends.length > 0) {
+      //   vState.messages.wip[purl].chosenFriends = erroredSends
+      // }
 
       const cardParent = getParentWithClass(outer, 'cardOuter') || document.getElementById('tabInner') // tabInner for popup
       const messageSharingArea = cardParent.querySelector('.sharingArea_messages')
@@ -1182,14 +1229,20 @@ const overlayUtils = {
       const result = overlayUtils.makeEl('div', null, { padding: '10px', color: 'red' })
       if (erroredSends.length === 0) {
         result.innerText = 'Your message was sent successfully!'
-      } else if (successFullSends.length === 0) {
+      } else if (!successFullSends || successFullSends.length === 0) {
         result.innerText = 'There was a problem sending your message. Please try again.'
       } else {
-        result.appendChild(overlayUtils.makeEl('div', null, {}, ('Your message was sent successfully to:')))
-        successFullSends.forEach(friend => result.appendChild(overlayUtils.makeEl('div', null, {}, (friend.nickname + '(' + friend.username + '@' + friend.serverurl + ')'))))
-        result.appendChild(document.createElement('br'))
         result.appendChild(overlayUtils.makeEl('div', null, {}, 'There were errors sending your message to:'))
-        erroredSends.forEach(friend => result.appendChild(overlayUtils.makeEl('div', null, {}, (friend.nickname + '(' + friend.username + '@' + friend.serverurl + ')'))))
+        erroredSends.forEach(friend => result.appendChild(overlayUtils.makeEl('div', null, {}, (
+          (friend.nickname || (friend.recipient_id + (friend.recipient_host ? (' @ ' + friend.recipient_host) : '')  ))
+          + ' -  (error: ' + (friend.err || 'unknown') + ')'
+        ))))
+        result.appendChild(document.createElement('br'))
+        result.appendChild(overlayUtils.makeEl('div', null, {}, ('Your message was sent successfully to:')))
+        successFullSends.forEach(friend => {
+          const frndText = ((friend.nickname || (friend.recipient_id + (friend.recipient_host ? (' @ ' + friend.recipient_host) : '')  ) + ', '))
+          result.appendChild(overlayUtils.makeEl('span', null, { color: 'black' }, frndText.slice(0, -2) + '.'))
+        })
       }
       if (from === 'mainInterface') {
         messageSharingArea.innerHTML = ''
@@ -1205,11 +1258,12 @@ const overlayUtils = {
         outer.appendChild(overlayUtils.makeEl('div', null, {}, ('.. but there was an error confirming the update. Please refresh this page')))
       } else if (updateStatus) {
         const itemJson = updateStatus.itemJson
+        if (!itemJson || !itemJson.vComments) { console.warn('no ivComments for ', { itemJson, updateStatus })}
         setTimeout(() => {
           const vMessageCommentDetailsDiv = cardParent.querySelector('.vMessageCommentDetails')
-          if (vMessageCommentDetailsDiv) overlayUtils.vMessageCommentDetails(purl, itemJson.vComments, vMessageCommentDetailsDiv)
+          if (vMessageCommentDetailsDiv) overlayUtils.vMessageCommentDetails(purl, itemJson?.vComments, vMessageCommentDetailsDiv)
           const vMessageCommentSummaryDiv = cardParent.querySelector('.vMessageCommentSummary')
-          if (vMessageCommentSummaryDiv) overlayUtils.vMessageCommentSummary(purl, itemJson.vComments, vMessageCommentSummaryDiv)
+          if (vMessageCommentSummaryDiv) overlayUtils.vMessageCommentSummary(itemJson || { purl }, vMessageCommentSummaryDiv)
         }, 5000)
       }
       // redraw messages areaboth forsmallcard and large card
@@ -1241,19 +1295,41 @@ const overlayUtils = {
     return new Date(vCreated).toLocaleDateString()
   },
   // drawing messages
-  vMessageCommentSummary: function (purl, vComments, existingDiv) {
+  vMessageCommentSummary: function (msgRecord, existingDiv) {
+    const purl = msgRecord.purl
+    const vComments = msgRecord.vComments
     const outer = existingDiv || overlayUtils.makeEl('div', null, { 'margin-top': '10px', 'border-top': '1px lightgrey solid', 'padding-top': '10px' })
     outer.className = 'vMessageCommentSummary'
     outer.innerHTML = ''
     const { lastSentComment, lastReceivedComment, numSentComments, numReceivedComments, numComments } = overlayUtils.commentData(vComments)
     if (numComments === 0) return outer
 
+    const receivedMsgCount = msgRecord.stats.gotCount
+    const unreadMsgCount = msgRecord.stats.unreadMsgIds.length
 
-    if (numReceivedComments > 0) {
+    if (unreadMsgCount > 0) {
+      const unReadDiv = overlayUtils.makeEl('div', null, null, null)
+      unReadDiv.appendChild(overlayUtils.makeEl('div', null, { color: 'purple', 'font-weight': 'bold', 'font-size': '20px', 'text-align': 'center' }, unreadMsgCount + ' new message' + (unreadMsgCount > 1 ? 's' : '') + '!'))
+      unReadDiv.appendChild(overlayUtils.makeEl('span', null, { }, (numReceivedComments > 1 ? ('Latest: ') : '... ')))
+      markRead = overlayUtils.makeEl('span', null, { color: 'blue', cursor: 'pointer', float: 'right' }, ' (Mark' + (unreadMsgCount > 1 ? ' all' : '') + ' as read)')
+      markRead.onclick = async function (e) {
+        const resp = await vState.markMsgAsRead(msgRecord.stats.unreadMsgIds)        
+        
+        // onsole.log('marking as read resp in utils', { resp, msgs: msgRecord.stats.unreadMsgIds })
+        if (resp && !resp.error) {
+          vState.gotMsgs.unfilteredItems.forEach(msg => { if (msgRecord.stats.unreadMsgIds.indexOf(msg._id) > -1) msg.marked_read = true })
+          msgRecord.stats.unreadMsgIds = []
+          e.target.parentElement.innerHTML = 'Marked as read'
+          // should refresh page if tab is showing
+        }
+      }
+      unReadDiv.appendChild(markRead)
+      outer.appendChild(unReadDiv)
+    } else if (numReceivedComments > 0) {
       outer.appendChild(overlayUtils.makeEl('div', null, { }, (numReceivedComments > 1 ? ('Last of ' + numReceivedComments + ' messages received:') : 'Received: ')))
-      const inner = overlayUtils.oneComment(purl, lastReceivedComment, { isReceived: true, oneLiner: true })
-      outer.appendChild(inner)
     }
+    const inner = overlayUtils.oneComment(purl, lastReceivedComment, { isReceived: true, oneLiner: true })
+    outer.appendChild(inner)
 
     if (numSentComments > 0) {
       outer.appendChild(overlayUtils.makeEl('div', null, { }, (numSentComments > 1 ? ('Latest of ' + numSentComments + ' messages sent:') : 'Sent: ')))
@@ -1275,7 +1351,7 @@ const overlayUtils = {
     if (numComments > 0) {
       let listOfPersons = []
       const personHasMessagedBefore = function (vComment) { // only show emoty messages if the person has not messages previously
-        return listOfPersons.indexOf(overlayUtils.fullPersonString(vComment.sender_id, vComment.sender_host)) > -1
+        return vComment.sender_id && listOfPersons.indexOf(overlayUtils.fullPersonString(vComment.sender_id, vComment.sender_host)) > -1
       }
       vComments.sort(sortBycreatedDate).reverse()
       vComments.forEach(vComment => {
@@ -1284,13 +1360,15 @@ const overlayUtils = {
             isReceived: !isOwnComment(vComment)
           }))
         }
-        if (isOwnComment(vComment)) listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(vComment.recipient_id, vComment.recipient_host))
-        if (!isOwnComment(vComment)) listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(vComment.sender_id, vComment.sender_host))
+        // if (isOwnComment(vComment) && vComment?.recipient_id) listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(vComment.recipient_id, vComment.recipient_host))
+        if (isOwnComment(vComment) && vComment?.recipients)  vComment?.recipients.forEach(recipient => { listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(recipient.recipient_id, recipient.recipient_host)) })
+        if (!isOwnComment(vComment) && vComment?.sender_id) listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(vComment.sender_id, vComment.sender_host))
       })
 
       // friendScroller
 
       if (listOfPersons.length > 1) {
+        outer.firstChild.appendChild(overlayUtils.makeEl('div', null, { 'font-size': '12px', color: 'grey', 'font-weight': 'normal' }, 'Filter by person:'))
         const personFilter = overlayUtils.personFilterScroller(purl, listOfPersons)
         // outer.appendChild(personFilter)
         outer.firstChild.after(personFilter)
@@ -1324,18 +1402,36 @@ const overlayUtils = {
     }
     return data
   },
-
+  shortDomainApp: function (person) {
+    return ((person.recipient_host && person.recipient_host !== vState.freezrMeta.serverAddress) ? ('@' + domainAppFromUrl(person.recipient_host)) : '')
+  },
   // persons and pictures
-  personOneLiner: function (personId, personHost, received, options) {
+  personOneLiner: function (peopleAsRecipients, received, options) {
+    
     const oneLiner = overlayUtils.makeEl('div', null, { overflow: 'hidden', 'white-space': 'nowrap', color: MCSS.PURPLE, 'padding-left': '4px' })
-    if (personId) {
+    if (peopleAsRecipients && peopleAsRecipients.length > 0) {
       const floater = overlayUtils.makeEl('span', null, { float: (received ? '' : 'right') })
-      floater.appendChild(overlayUtils.personPict(personId, personHost))
+      peopleAsRecipients.forEach(person => {
+        floater.appendChild(overlayUtils.personPict(person.recipient_id, person.recipient_host))
+      })
       oneLiner.appendChild(floater)
-      const texter = overlayUtils.makeEl('span', null, { 'font-weight': 'bold', 'margin-top': '10px', display: 'inline-block' }, (options?.nofrom ? '' : (received ? 'From ' : 'To ')) + personId)
-      if (personHost) texter.appendChild(overlayUtils.makeEl('span', null, null, (' @ ' + domainAppFromUrl(personHost))))
+      let texterText = ''
+      if (peopleAsRecipients.length > 1) {
+        peopleAsRecipients.forEach(person => { texterText += person.recipient_id + overlayUtils.shortDomainApp(person) + ', ' })
+        texterText = texterText.slice(0, -2)
+      } else {
+        texterText = peopleAsRecipients[0].recipient_id + overlayUtils.shortDomainApp(peopleAsRecipients[0])
+      }
+      // floater.appendChild(dg.div(JSON.stringify(peopleAsRecipients)))
+      const texter = overlayUtils.makeEl('span', null, { 'font-weight': 'bold', 'margin-top': '10px', display: 'inline-block' }, ((received ? 'From ' : 'To ') + texterText)) // (options?.nofrom ? '' : (received ? 'From ' : 'To ')), texterText)
+      // if (personHost) texter.appendChild(overlayUtils.makeEl('span', null, null, (' @ ' + domainAppFromUrl(personHost))))
       oneLiner.appendChild(texter)
-    }
+    } 
+    // else {
+    //   const floater = overlayUtils.makeEl('span', null, { float: (received ? '' : 'right') })
+    //   floater.appendChild(dg.div(JSON.stringify(peopleAsRecipients)))
+    //   oneLiner.appendChild(floater)
+    // }
     return oneLiner
   },
   personPict: function (personId, personHost, options) {
@@ -1344,7 +1440,6 @@ const overlayUtils = {
       personHost = personId.serverurl
       personId = personId.username
     }
-    // onsole.log('person pict for ', { personHost, personId, options })
     const width = options?.width || '25px'
     const imgDiv = overlayUtils.makeEl('img', null, { 'border-radius': '50%', width, height: width, 'margin-right': '2px', 'margin-bottom': '-5px' }, '')
     imgDiv.src = (overlayUtils.personPictUrl(personId, personHost))
@@ -1356,11 +1451,11 @@ const overlayUtils = {
   },
   personPictUrl: function (personId, personHost) {
     if (!personHost && vState?.isExtension) personHost = vState.freezrMeta?.serverAddress
-    // console.log('creating person pict url for ', { personId, personHost, url: ((personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg') })
     return (personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg'
   },
   fullPersonString: function (personId, personHost) {
-    return personId + (personHost ? ('@' + personHost) : '')
+    const isSameServer = !personHost || personHost === vState.freezrMeta?.serverAddress 
+    return personId + ((personHost && !isSameServer) ? ('@' + personHost) : '')
   },
   tempFriendObjFrom: function (personId, personHost, allFriends) {
     // to do - could fetch this from vtsate.friends if friend exists
@@ -1387,8 +1482,12 @@ const overlayUtils = {
     return hLightOrComment.sender_id + (hLightOrComment.sender_host ? ('@' + hLightOrComment.sender_host) : '')
   },
   fullRecipientName: function (hLightOrComment) {
-    if (!hLightOrComment || !hLightOrComment.recipient_id) return null
-    return hLightOrComment.recipient_id + (hLightOrComment.recipient_host ? ('@' + hLightOrComment.recipient_host) : '')
+    if (!hLightOrComment || (!hLightOrComment.recipient_id && !hLightOrComment.username)) return null
+    const username = hLightOrComment.recipient_id || hLightOrComment.username
+    const serverurl = hLightOrComment.recipient_host || hLightOrComment.serverurl
+    let text = username
+    if (serverurl && serverurl !== vState.freezrMeta.serverAddress) text += ('@' + domainAppFromUrl(serverurl))
+    return text
   },
   personPictOrInitial: function (friend, options) {
     const WIDTH = options?.width || '40px'
@@ -1437,7 +1536,7 @@ const overlayUtils = {
         outer.setAttribute('shown', (wasSeen ? 'false' : 'true'))
         const cardDiv = getParentWithClass(outer, 'cardOuter')
         if (cardDiv) {
-          const personDivs = cardDiv.querySelectorAll('[personid="' + fullPerson + '"]')
+          const personDivs = cardDiv.querySelectorAll('[personid*="' + fullPerson + '"]')
           const expandInitOption = e.initExpandSection ? { height: 'auto' } : null
           personDivs.forEach(aDiv => { if (wasSeen) { collapseSection(aDiv) } else { expandSection(aDiv, expandInitOption) } })
         } else {
@@ -1522,6 +1621,8 @@ const overlayUtils = {
       if (existing > -1) {
         wip.chosenFriends.splice(existing, 1)
       } else {
+        friend.recipient_id = friend.username
+        friend.recipient_host = friend.serverurl
         wip.chosenFriends.push(friend)
       }
       const friendScroller = getParentWithClass(outer, 'friendScroller')
@@ -1550,7 +1651,7 @@ const overlayUtils = {
 
         const textOuter = overlayUtils.makeEl('span', null, { height: '12px' })
         if (friend.nickname) textOuter.appendChild(overlayUtils.makeEl('span', null, { 'font-weight': 'bold' }), friend.nickname + ': ')
-        textOuter.appendChild(overlayUtils.makeEl('span', null, null, (' (' + overlayUtils.fullPersonString(friend.username, friend.serverurl) + ')')))
+        textOuter.appendChild(overlayUtils.makeEl('span', null, null, (overlayUtils.fullPersonString(friend.username, friend.serverurl))))
         friendOuter.appendChild(textOuter)
         recipients.appendChild(friendOuter)
       })

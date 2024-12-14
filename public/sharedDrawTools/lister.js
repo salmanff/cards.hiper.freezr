@@ -473,7 +473,7 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
       }
     }
     vState.tabs = [openWindows, closedWindows]
-    // console.log('tabs', { openWindows, closedWindows })
+    // onsole.log('tabs', { openWindows, closedWindows })
 
     // iterate open and closed tab
     const windowTypes = [openWindows, closedWindows] //  ['openTabs', 'closedTabs'] //
@@ -481,7 +481,8 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
     let windowCounter = 0
     let itemCounter = 1
     mainDiv.firstChild.style.display = 'none'
-    windowTypes.forEach(windowType => {
+    for (const windowType of windowTypes) {
+   //  windowTypes.forEach(windowType => {
       typeCounter++
       const titleDiv = dg.h2({
         style: { cursor: (typeCounter > 1 ? 'pointer' : ''), color: (typeCounter > 1 ? 'cornflowerblue' : 'white'), margin: '20px 0px 0px 10px' },
@@ -507,8 +508,12 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
         const windowTitle = dg.h3({ style: { padding: '0px 0px 0px 20px', color: (isIncognito ? 'black' : 'white') } }, (typeCounter === 1 ? '' : 'Closed ') + (isIncognito ? ' Incognito ' : '') + 'Window ' + ++windowCounter)
         windowOuter.append(windowTitle)
         const openTabsOuter = lister.emptyFlexBox()
-        const drawtabHistory = function (tabObject, tabIsOpen, windowIsOpen) {
+        const drawtabHistory = async function (tabObject, tabIsOpen, windowIsOpen) {
           const tabDiv = lister.emptyFlexBox()
+          if (tabObject.tabHistory.length === 0) {
+            const his = await chrome.runtime.sendMessage({ msg: 'getLogFromVulog', purl: tabObject.tabDetails.url })
+            if (his?.log) tabObject.tabHistory = [his.log]
+          }
           if (tabObject.tabHistory.length === 0) {
             const domainApp = tabObject.tabDetails.url.indexOf('http') === 0 ? domainAppFromUrl(tabObject.tabDetails.url) : tabObject.tabDetails.url.split(':')[0] // for 'file' or 'chrome'
             tabObject.tabHistory = [{
@@ -537,7 +542,7 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
               tabDiv.appendChild(theLogDiv)
             } else { /* tab is already drawn */ }
           })
-          const outer = dg.div({ className: 'tabOuter', style: { padding: '10px' /*, border: '1px solid red' */ } })
+          const outer = dg.div({ className: 'tabOuter', style: { padding: '10px', transition: 'width 0.3s ease-out' /*,   border: '1px solid red' */ } })
 
           if (tabIsOpen) {
             outer.appendChild(dg.div(
@@ -559,18 +564,29 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
                 dg.span({
                   style: { background: 'white', 'border-radius': '5px', padding: '5px', cursor: 'pointer', color: 'indianred' },
                   onclick: (e) => {
-                    chrome.tabs.remove(tabObject.tabDetails?.id, function () {
-                      const theDiv = getParentWithClass(e.target, 'tabOuter')
-                      Array.from(theDiv.firstChild.nextSibling.childNodes).forEach(child => {
-                        child.style.transform = 'rotateX(90deg)'
-                      })
-                      setTimeout(() => { theDiv.remove() }, 400)
-                      windowType[tabObject.tabDetails?.windowId][tabObject.tabDetails?.id].open = false
-
-                      const closedTabsOuter = document.querySelector('[closedTabListForWindow="' + tabObject.tabDetails?.windowId + '"]')
-                      closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1)))
-                      // nb if this is the last window should remove the window and add it to closed windows secion, ut igneod that for the moment
+                    const tabOuter = getParentWithClass(e.target, 'tabOuter')
+                    const muteCloseHolder = getParentWithClass(e.target, 'muteCloseHolder')
+                    muteCloseHolder.remove()
+                    const theDivs = tabOuter.querySelectorAll('.cardOuter')
+                    theDivs.forEach(theDiv => {
+                      theDiv.style.transform = 'rotateY(90deg)'
                     })
+                    setTimeout(() => { 
+                      tabOuter.style.width = '0px' 
+                      setTimeout(async () => { 
+                        chrome.tabs.remove(tabObject.tabDetails?.id)
+                        tabOuter.remove() 
+                        // 
+                        windowType[tabObject.tabDetails?.windowId][tabObject.tabDetails?.id].open = false
+
+                        const closedTabsOuter = document.querySelector('[closedTabListForWindow="' + tabObject.tabDetails?.windowId + '"]')
+                        const hist = await drawtabHistory(tabObject, false, (typeCounter === 1))
+                        closedTabsOuter.appendChild(hist)
+                        // nb if this is the last window should remove the window and add it to closed windows secion, ut igneod that for the moment
+                        
+                      }, 500)
+                    }, 600)
+
                     // chrome.tabs.remove(tab.id, function() { })
                     // theDiv.style.display = 'none'
                     // remove from db
@@ -596,9 +612,10 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
           }
         }
         openTabsList.sort((a, b) => { return a.tabDetails.index < b.tabDetails.index ? -1 : 1 })
-        openTabsList.forEach(tabObject =>
-          openTabsOuter.appendChild(drawtabHistory(tabObject, true, true))
-        )
+        for (const tabObject of openTabsList) {
+          const hist = await drawtabHistory(tabObject, true,  true)
+          openTabsOuter.appendChild(hist)
+        }
         windowOuter.appendChild(openTabsOuter)
 
         const closedTabsOuter = lister.emptyFlexBox()
@@ -617,17 +634,19 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
           closedTabsOuter.setAttribute('closedTabListForWindow', windowId)
           closedTabsOuter.style['border-top'] = '1px solid white'
           closedTabsOuter.style.display = (typeCounter > 1 ? 'flex' : 'none')
-          // closedTabsOuter.style.height = '0'
-          closedTabList.forEach(tabObject =>
-            closedTabsOuter.appendChild(drawtabHistory(tabObject, false, (typeCounter === 1)))
-          )
+          closedTabsOuter.style.height = '0'
+          for (const tabObject of closedTabList) {
+            const hist = await drawtabHistory(tabObject, false, (typeCounter === 1))
+            closedTabsOuter.appendChild(hist)
+          }
         }
         windowOuter.appendChild(closedTabsOuter)
 
         // use openerTabId as a way of finding referrer!
         mainDiv.appendChild(windowOuter)
       }
-    })
+    }
+  // )
   }
 }
 const tabRecordByPurl = function (purl) {
@@ -1006,8 +1025,8 @@ lister.drawTabItem = function (logItem, opt = {}) {
   const titleOuter = lister.titleOuter(expandedView)
   const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } })
   titleInner.innerText = lister.createSanitizedTitle(logItem)
-  titleInner.setAttribute('href', logItem.url)
-  titleOuter.appendChild(lister.openOutside(logItem.url, { itemdiv }))
+  titleInner.setAttribute('href', logItem.purl)
+  titleOuter.appendChild(lister.openOutside(logItem.purl, { itemdiv }))
   titleOuter.appendChild(titleInner)
 
   itemdiv.appendChild(titleOuter)
@@ -1129,7 +1148,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
   itemdiv.appendChild(overlayUtils.areaTitle('Sharing', { display: 'none' }))
   itemdiv.appendChild(lister.sharingDetailsSkeleton(msgRecord.purl))
 
-  itemdiv.appendChild(overlayUtils.vMessageCommentSummary(msgRecord.purl, msgRecord.vComments))
+  itemdiv.appendChild(overlayUtils.vMessageCommentSummary(msgRecord))
   itemdiv.appendChild(overlayUtils.vMessageCommentDetails(msgRecord.purl, msgRecord.vComments))
 
   if ((markOnMarks && markOnMarks.vHighlights && markOnMarks.vHighlights.length > 0) || (msgRecord.vHighlights && msgRecord.vHighlights.length > 0)) {
@@ -2041,7 +2060,7 @@ drawSharingSubsection._public = function (purl, options) {
     const button = lister.makePublicShareButton(
       {
         title: 'Share the link publicly',
-        buttonText: 'Share Publicly',
+        buttonText: 'Post Public Link',
         successText: 'You have published this!',
         onlineAction: async function () {
           try {
@@ -2944,7 +2963,9 @@ lister.getAllMessagesAndMerge = async function () {
   // if (!vState.sentMsgs) vState.sentMsgs = lister.emptyStatsObj()
   // if (!vState.gotMsgs) vState.gotMsgs = lister.emptyStatsObj()
   const newSentMsgs = await lister.getMoreAndUpdateCountStatsFor('sentMsgs')
+  newSentMsgs.forEach(msg => { msg.isSent = true })
   const newGotMsgs = await lister.getMoreAndUpdateCountStatsFor('gotMsgs')
+  newGotMsgs.forEach(msg => { msg.isGot = true })
   const newItems = lister.mergeNewAndExistingMessages([], newSentMsgs, newGotMsgs) // note - really [] shoul;d be replaced by vState.messages.unfilteredItems - chec why old and new were seaprated befpore
 
   if (!vState.messages) vState.messages = lister.emptyStatsObj()
@@ -2993,19 +3014,29 @@ lister.mergeNewAndExistingMessages = function (existingitems, newSentOrGotMsgs1,
   if (!newSentOrGotMsgs2) newSentOrGotMsgs2 = []
   const allNew = [...newSentOrGotMsgs1, ...newSentOrGotMsgs2]
   const itemJson = {}
+  const stats = { sentCount: 0, gotCount: 0, unreadMsgIds: []}
 
   existingitems.forEach(item => {
     if (itemJson[item.record.purl]) console.warn('same putl appearing twice in merged messages???')
     itemJson[item.record.purl] = item
+    if (!itemJson[item.record.purl].stats) itemJson[item.record.purl].stats = { sentCount: 0, gotCount: 0, unreadMsgIds: [] }
   })
   allNew.forEach(item => {
+    item = structuredClone(item)
     if (!item.record) {
       console.warn('no recrod to merge for ', item)
-    } else if (!itemJson[item.record.purl]) {
-      itemJson[item.record.purl] = convertDownloadedMessageToRecord(item)
     } else {
-      itemJson[item.record.purl] = mergeMessageRecords(itemJson[item.record.purl], item)
-    }
+      if (!itemJson[item.record.purl]) {
+        itemJson[item.record.purl] = convertDownloadedMessageToRecord(item)
+        const unreadMsgIds = item.isGot && !item.marked_read ? [item._id] : []
+        itemJson[item.record.purl].stats = { sentCount: 0, gotCount: 0, unreadMsgIds }
+      } else {
+        itemJson[item.record.purl] = mergeMessageRecords(itemJson[item.record.purl], item)
+      }
+      if (item.isSent) itemJson[item.record.purl].stats.sentCount++
+      if (item.isGot) itemJson[item.record.purl].stats.gotCount++
+      if (item.isGot && !item.marked_read) itemJson[item.record.purl].stats.unreadMsgIds.push(item._id)
+    } 
   })
   const newItemsReturned = []
   for (const purl in itemJson) {
@@ -3112,7 +3143,7 @@ lister.getMoreAndUpdateCountStatsFor = async function (list) {
     const openTabs = {}
     const closedTabs = {}
 
-    if (newItems?.currentTabs && newItems?.currentTabs.lemngth > 0) {
+    if (newItems?.currentTabs && newItems?.currentTabs.length > 0) {
       newItems.currentTabs.forEach(openTab => {
         if (!openTabs[openTab.windowId]) openTabs[openTab.windowId] = {}
         if (newItems.logDetailsInRAM[openTab.id]) {

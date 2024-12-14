@@ -1,7 +1,7 @@
 /*
     marks.js -> cards.hiper.freezr
 
-    version 0.0.3 - mid 2023 
+    version 0.0.4 - late 2024
 
 */
 // todo:  revise and review
@@ -71,6 +71,9 @@ const vState = {
   mainNoteSaver: async function (mark) {
     vState.saver.saveList.vNotes[mark._id] = mark.vNote
     return vState.saveWithInterValer()
+  },
+  markMsgAsRead: async function (unreadMsgIds) {
+    return await freepr.feps.markMessagesRead(unreadMsgIds, null)
   },
   hLightCommentSaver: async function (hLight, text, options) { // options: purl, mark, noteSaver
     if (!hLight || !text || (!options.purl && !options.mark)) return { error: true, msg: 'need comment text to process' }
@@ -143,20 +146,6 @@ const vState = {
       return { success: false, errors: {} }
     }
   },
-  // environmentSpecificGetMore: async function (list, count, skip, gotAll) {
-  //   // for online web based version
-  //   // todo diff filtered and unfiltered lists
-  //   if (!gotAll) {
-  //     const apptable = appTableFromList(list)
-  //     const q = { fj_deleted: { $ne: true } }
-  //     if (list === 'sentMsgs' || list === 'gotMsgs') q.app_id = 'cards.hiper.freezr'
-  //     const newItems = await freepr.feps.postquery({
-  //       app_table: apptable, q, count, skip
-  //     })
-  //     return newItems
-  //   }
-  //   return []
-  // },
   environmentSpecificGetOlderItems: async function (list, params) {
     // for online web based version
     if (params.gotAll) return []
@@ -266,19 +255,17 @@ const vState = {
     // params : { chosenFriends, text, hLight, markCopy }
 
     const { chosenFriends, text, hLight, markCopy } = params
-    const successFullSends = []
-    const erroredSends = []
 
     try {
       if (!chosenFriends || chosenFriends.length === 0) throw new Error('No friends chosen')
-      if (!markCopy) throw new Error('mark copy could not be found', purl)
+      if (!markCopy) throw new Error('mark copy could not be found', markCopy?.purl)
       markCopy.vComments = []
       const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
       if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
       markCopy._id = createRet._id
     } catch (error) {
       console.warn('err in sending msg', error)
-      return ({ error, successFullSends, erroredSends: chosenFriends })
+      return ({ error, successFullSends: [], erroredSends: chosenFriends })
     }
 
     const msgToSend = {
@@ -289,45 +276,39 @@ const vState = {
       record: markCopy
     }
 
-    // should do promises all here
+    // new v sending all together 
+    const recipients = []
     for (const idx in chosenFriends) {
       const friend = chosenFriends[idx]
+      recipients.push({ recipient_id: friend.recipient_id, recipient_host: friend.recipient_host }) // ((friend.username + (friend.serverurl ? ('@' + friend.serverurl) : '') )) 
+    }
 
-      msgToSend.recipient_id = friend.username
-      msgToSend.recipient_host = friend.serverurl
-      msgToSend.record.vComments = [{
-        recipient_host: friend.serverurl,
-        recipient_id: friend.username,
+    msgToSend.record.vComments = [{
+      sender_host: vState.freezrMeta.serverAddress,
+      sender_id: vState.freezrMeta.userId,
+      vCreated: new Date().getTime(),
+      text: hLight ? '' : text // if it is a highlight then the text goes in the highlights
+    }]
+    // console.log('backgroun ', { recipients, msgToSend, text })
+    if (hLight) {
+      hLight.vComments = [{
         sender_host: vState.freezrMeta.serverAddress,
         sender_id: vState.freezrMeta.userId,
         vCreated: new Date().getTime(),
-        text: hLight ? '' : text // if it is a highlight then the text goes in the highlights
+        text // if it is a highlight then the text goes in the highlights
       }]
-      if (hLight) {
-        hLight.vComments = [{
-          recipient_host: friend.serverurl,
-          recipient_id: friend.username,
-          sender_host: vState.freezrMeta.serverAddress,
-          sender_id: vState.freezrMeta.userId,
-          vCreated: new Date().getTime(),
-          text // if it is a highlight then the text goes in the highlights
-        }]
-        msgToSend.record.vHighlights = [hLight]
-      }
-
-      try {
-        const sendRet = await freepr.ceps.sendMessage(msgToSend)
-        if (!sendRet || sendRet.error) throw new Error('Error sending message: ' + (sendRet?.error || 'unknown'))
-        successFullSends.push(friend)
-      } catch (e) {
-        console.error('error sending message', { e })
-        const errJson = JSON.parse(JSON.stringify(friend))
-        errJson.error = e.message
-        erroredSends.push(errJson)
-      }
+      msgToSend.record.vHighlights = [hLight]
     }
+    msgToSend.recipients = recipients
 
-    return ({ successFullSends, erroredSends })
+    try {
+      const sendRet = await freepr.ceps.sendMessage(msgToSend)
+      if (!sendRet || sendRet.error) throw new Error('Error sending message: ' + (sendRet?.error || 'unknown'))
+      return ({ successFullSends: sendRet.recipientsSuccessfullysentTo, erroredSends: sendRet.recipientsWithErrorsSending })
+    } catch (e) {
+      console.error('error sending message', { e })
+      return ({ successFullSends: null, erroredSends: recipients, error: e.message })
+    }
   },
   warningTimeOut: null,
   showWarning: function (msg, timing) {

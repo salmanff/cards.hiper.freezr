@@ -46,8 +46,9 @@ const vState = {
     return retInfo
   }
 }
+vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
 if (!isIos()) {
-  vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
+  // vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
   if (window.self === window.top) {
     // onsole.log({ vState })
     vState.desktop_overlay = {
@@ -673,7 +674,7 @@ if (!isIos()) {
         vState.hideHighlighterDivs()
       } else {
         const hlightId = e.target.id.split('_')[3]
-        onsole.log('will change color for hlightId ', hlightId)
+        // console.log('will change color for hlightId ', hlightId)
         chrome.runtime.sendMessage({ msg: 'changeHlightColor', hColor, hlightId, url: window.location.href }, function (response) {
           // onsole.log('changeHlightColor sent to background - ', { response, hlightId })
           const hLightDiv = document.getElementById('vulog_hlight_' + hlightId)
@@ -717,7 +718,9 @@ if (!isIos()) {
       const OUTERBOX_SIZE = 40
       highLightBox.style.left = Math.min(Math.max(0, window.scrollX + window.innerWidth - OUTERBOX_SIZE), Math.max(0, Math.round(window.scrollX + sRect.right - (sRect.width + OUTERBOX_SIZE) / 2))) + 'px'
 
-      const highlightButt = overlayUtils.makeEl('img', 'vulog_overlay_highlighter')
+      // const highlightButt = overlayUtils.makeEl('img', 'vulog_overlay_highlighter')
+      const highlightButt = overlayUtils.makeEl((vState.isAppInjectedScript ? 'img' : 'div'), 'vulog_overlay_highlighter')
+      if (!vState.isAppInjectedScript) highlightButt.className = 'vulog_iOsoverlay_highlighter_green'
       highlightButt.style.width = '40px'
       highLightBox.appendChild(highlightButt)
 
@@ -741,7 +744,16 @@ if (!isIos()) {
     }
   }
   vState.redrawIosPalleteAndPen = function () {
-    if (document.getElementById('vulog_overlay_highlighter')) document.getElementById('vulog_overlay_highlighter').src = chrome.runtime.getURL('images/cursor_' + vState.currentHColor + '.png')
+    // onsole.log('redrawIosPalleteAndPen vState.isAppInjectedScript ', { isWebView: vState.isAppInjectedScript, varNotExistsIsNotWebview: (typeof vulogPageDataFromSwift === undefined) } )
+    if (document.getElementById('vulog_overlay_highlighter')) {
+      if (vState.isAppInjectedScript) {
+        // change class color
+        document.getElementById('vulog_overlay_highlighter').src = chrome.runtime.getURL('images/cursor_' + vState.currentHColor + '.png')
+      } else {
+        document.getElementById('vulog_overlay_highlighter').className = 'vulog_iOsoverlay_highlighter_' + vState.currentHColor
+
+      }
+    }
     if (document.getElementById('vulogIos_colorChoosearea')) {
       const colorPallette = document.getElementById('vulogIos_colorChoosearea')
       colorPallette.style.display = 'block'
@@ -792,7 +804,10 @@ if (!isIos()) {
           }
         )
       }, 5000)
-      setTimeout(function () { showHighlights() }, 500)
+      setTimeout(function () { 
+        vState.showThis = 'ownMark'
+        showHighlights() 
+      }, 500)
     }
   }
 
@@ -1054,7 +1069,7 @@ const highlightSelection = function () {
       vState.pageHighlightPending = { selectionString, container, selection, hlightIdentifier, url: window.location.href }
       chrome.runtime.sendMessage({ msg: 'newHighlight', url: window.location.href, hlightIdentifier: hlightIdentifier, pageInfoFromPage: vState.pageInfoFromPage, highlight: theHighlight },
         function (resp) {
-          if (!resp || resp.error) console.warn('Error sending info to background ', vState.pageInfoFromPage, resp)
+          if (!resp || resp.error) console.warn('Error sending info to background ', { info: vState.pageInfoFromPage, resp})
           if (vState.isAppInjectedScript && vulogIsOriginalUrl === false) {
             setTimeout(function () {
               history.back()
