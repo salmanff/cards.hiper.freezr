@@ -3035,7 +3035,7 @@ lister.mergeNewAndExistingMessages = function (existingitems, newSentOrGotMsgs1,
       }
       if (item.isSent) itemJson[item.record.purl].stats.sentCount++
       if (item.isGot) itemJson[item.record.purl].stats.gotCount++
-      if (item.isGot && !item.marked_read) itemJson[item.record.purl].stats.unreadMsgIds.push(item._id)
+      if (item.isGot && !item.marked_read && itemJson[item.record.purl].stats.unreadMsgIds.indexOf(item._id) < 0) itemJson[item.record.purl].stats.unreadMsgIds.push(item._id)
     } 
   })
   const newItemsReturned = []

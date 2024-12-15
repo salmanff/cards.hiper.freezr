@@ -1042,8 +1042,9 @@ const overlayUtils = {
     if (!vComment) console.warn('no message details for ', { vComment } )
     if (!vComment) return oneComment.appendChild(overlayUtils.makeEl('div', null, null, 'Error: No message details'))
 
+    oneComment.setAttribute('personid', overlayUtils.allReceipientAndSenderNames(vComment).join(','))
+
     if (options?.isReceived || options?.addPerson) {
-      oneComment.setAttribute('personid', overlayUtils.fullSenderName(vComment))
       oneComment.appendChild(overlayUtils.personOneLiner([{ recipient_id: vComment.sender_id, recipient_host: vComment.sender_host }],true, options))
 
       if (!options.noreply) {
@@ -1071,9 +1072,11 @@ const overlayUtils = {
           overlayUtils.setUpMessagePurlWip(purl, options.hLight)
           vState.messages.wip[purl].text = ''
           vState.messages.wip[purl].chosenFriends = [{ recipient_id: vComment.sender_id, recipient_host: vComment.sender_host }]
-          vComment.recipients.forEach(recipient => {
-            if (!overlayUtils.receipientIsUser(recipient)) vState.messages.wip[purl].chosenFriends.push(recipient)
-          })
+          if (vComment.recipients){
+            vComment.recipients.forEach(recipient => {
+              if (!overlayUtils.receipientIsUser(recipient)) vState.messages.wip[purl].chosenFriends.push(recipient)
+            })
+          }
           const messageSendingInterface = overlayUtils.drawMessageSendingInterface(purl, 'inlineReply', options.hLight)
           messageSendingInterface.style.height = '0px'
           e.target.parentElement.appendChild(messageSendingInterface)
@@ -1090,7 +1093,6 @@ const overlayUtils = {
         oneComment.appendChild(replyButt)
       }
     } else {
-      oneComment.setAttribute('personid', overlayUtils.fullRecipientName(vComment))
       // oneComment.appendChild(dg.span(' notRec ' + JSON.stringify(vComment.recipients)))
       oneComment.appendChild(overlayUtils.personOneLiner(vComment.recipients, false))
     }
@@ -1122,6 +1124,17 @@ const overlayUtils = {
       'font-size': 'smaller',
       color: 'darkgray'
     })
+
+    if (vComment.recipientStatus && vComment.recipients && vComment.recipients.length > 0) {
+      const recipientsWithProblems = []
+      vComment.recipients.forEach(recipient => {
+        const name = recipient.recipient_id + (recipient.recipient_host ? '@' + recipient.recipient_host : '')
+        if (vComment.recipientStatus[name].status != 'verified') recipientsWithProblems.push(overlayUtils.fullRecipientName(recipient))
+      })
+      if (recipientsWithProblems.length > 0) {
+        bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'left', color: 'red' }, 'Message delivery failed for ' + recipientsWithProblems.join(',') + '.'))
+      }
+    }
 
     bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'right' }, overlayUtils.dateOrTime(vComment.vCreated)))
     const bottomLineText = overlayUtils.makeEl('div', null, { overflow: 'hidden', height: '12px', 'text-overflow': 'ellipsis', 'margon-right': '5px' })
@@ -1159,7 +1172,9 @@ const overlayUtils = {
       wip.text = e.target.innerText
       if (e.key === 'Enter') {
         e.preventDefault()
-        wip.text = e.target.innerText.slice(0, -1)
+        e.target.innerText = e.target.innerText.slice(0, -1)
+        wip.text = e.target.innerText
+        prepUIForSending()
         await sendMessageAndRedraw(purl, outer, from)
       }
     })
@@ -1170,25 +1185,35 @@ const overlayUtils = {
     if (wip.text) messageBox.innerText = wip.text
 
     const clickSendMessage = async function (e) {
-      e.target.style.display = 'none'
-      e.target.after(smallSpinner())
+      // e.target.style.display = 'none'
+      // e.target.after(smallSpinner())
+      prepUIForSending()
       // const messageBox = e.target.parentElement.querySelector('messageBox')
+      // messageBox.setAttribute('contenteditable', false)
+      sendMessageAndRedraw(purl, outer, from)
+    }
+
+    let sendButt
+    const prepUIForSending = function () {
       messageBox.setAttribute('contenteditable', false)
       messageBox.style['background-color'] = '#80008080'
-      sendMessageAndRedraw(purl, outer, from)
+      if (sendButt){ 
+        sendButt.style.display = 'none'
+        sendButt.after(smallSpinner())
+      }
     }
 
     // messageBox.style.margin = '0px 5px'
     if (from === 'mainInterface') {
       outer.appendChild(messageBox)
       const sendOuter = overlayUtils.makeEl('div', null, { 'text-align': 'center'})
-      const SendInner = overlayUtils.makeEl('div', null, { zoom: '80%', cursor: 'pointer', margin: '5px' })
-      SendInner.className = 'vulog_overlay_send'
-      SendInner.onclick = clickSendMessage
-      sendOuter.appendChild(SendInner)
+      sendButt = overlayUtils.makeEl('div', null, { zoom: '80%', cursor: 'pointer', margin: '5px' })
+      sendButt.className = 'vulog_overlay_send'
+      sendButt.onclick = clickSendMessage
+      sendOuter.appendChild(sendButt)
       outer.appendChild(sendOuter)
     } else { // from === 'inlineReply'
-      const sendButt = overlayUtils.makeEl('div', null, { zoom: '80%', cursor: 'pointer', margin: '-10px 15px 0px 10px' })
+      sendButt = overlayUtils.makeEl('div', null, { zoom: '80%', cursor: 'pointer', margin: '-10px 15px 0px 10px' })
       sendButt.className = 'vulog_overlay_send'
       sendButt.onclick = clickSendMessage
 
@@ -1214,6 +1239,12 @@ const overlayUtils = {
       const hLight = wip.hLight
       const markCopy = convertMarkToSharable((vState.marks.lookups[purl] || getMarkFromVstateList(purl, { excludeHandC: true })), { excludeHlights: (from === 'inlineReply') })
       markCopy._id = null
+
+      //ugly fix of inconsitency issue
+      chosenFriends.forEach(friend => {
+        if (!friend.username && friend.recipient_id) friend.username = friend.recipient_id
+        if (!friend.serverurl && friend.recipient_host) friend.serverurl = friend.recipient_host
+      })
 
       const { successFullSends, erroredSends } = await vState.environmentSpecificSendMessage({ chosenFriends, text, hLight, markCopy })
       // onsole.log({ chosenFriends, successFullSends, erroredSends })
@@ -1305,8 +1336,8 @@ const overlayUtils = {
     const { lastSentComment, lastReceivedComment, numSentComments, numReceivedComments, numComments } = overlayUtils.commentData(vComments)
     if (numComments === 0) return outer
 
-    const receivedMsgCount = msgRecord.stats.gotCount
-    const unreadMsgCount = msgRecord.stats.unreadMsgIds.length
+    const receivedMsgCount = msgRecord.stats?.gotCount
+    const unreadMsgCount = msgRecord.stats?.unreadMsgIds.length
 
     if (unreadMsgCount > 0) {
       const unReadDiv = overlayUtils.makeEl('div', null, null, null)
@@ -1359,9 +1390,9 @@ const overlayUtils = {
       vComments.sort(sortBycreatedDate).reverse()
       vComments.forEach(vComment => {
         if (vComment.text || vComment.hLightCopy || vComment.hLightsCopy || !personHasMessagedBefore(vComment)) {
-          outer.appendChild(overlayUtils.oneComment(purl, vComment, {
-            isReceived: !isOwnComment(vComment)
-          }))
+          const commentDiv = overlayUtils.oneComment(purl, vComment, { isReceived: !isOwnComment(vComment) })
+          commentDiv.className = 'vMessageCommentDetailsComment'
+          outer.appendChild(commentDiv)
         }
         // if (isOwnComment(vComment) && vComment?.recipient_id) listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(vComment.recipient_id, vComment.recipient_host))
         if (isOwnComment(vComment) && vComment?.recipients)  vComment?.recipients.forEach(recipient => { listOfPersons = addToListAsUniqueItems(listOfPersons, overlayUtils.fullPersonString(recipient.recipient_id, recipient.recipient_host)) })
@@ -1482,7 +1513,9 @@ const overlayUtils = {
   },
   fullSenderName: function (hLightOrComment) {
     if (!hLightOrComment || !hLightOrComment.sender_id) return null
-    return hLightOrComment.sender_id + (hLightOrComment.sender_host ? ('@' + hLightOrComment.sender_host) : '')
+    let text = hLightOrComment.sender_id
+    if (hLightOrComment.sender_host && hLightOrComment.sender_host !== vState.freezrMeta.serverAddress) text += ('@' + domainAppFromUrl(hLightOrComment.sender_host))
+    return text // hLightOrComment.sender_id + (hLightOrComment.sender_host ? ('@' + hLightOrComment.sender_host) : '')
   },
   fullRecipientName: function (hLightOrComment) {
     if (!hLightOrComment || (!hLightOrComment.recipient_id && !hLightOrComment.username)) return null
@@ -1491,6 +1524,20 @@ const overlayUtils = {
     let text = username
     if (serverurl && serverurl !== vState.freezrMeta.serverAddress) text += ('@' + domainAppFromUrl(serverurl))
     return text
+  },
+  allReceipientAndSenderNames: function (hLightOrComment) {
+    const names = []
+    const sender = overlayUtils.fullSenderName(hLightOrComment)
+    if (sender !== vState.freezrMeta.userId && names.indexOf(sender) === -1) names.push(sender)
+    const receiver = overlayUtils.fullRecipientName(hLightOrComment)
+    if (receiver !== vState.freezrMeta.userId && names.indexOf(receiver) === -1) names.push(receiver)
+    if (hLightOrComment.recipients && hLightOrComment.recipients.length > 0) {
+      hLightOrComment.recipients.forEach(recipient => {
+        const recipientName = overlayUtils.fullRecipientName(recipient)
+        if (recipientName !== vState.freezrMeta.userId && names.indexOf(recipientName) === -1) names.push(recipientName)
+      })
+    }
+    return names
   },
   personPictOrInitial: function (friend, options) {
     const WIDTH = options?.width || '40px'
@@ -1523,9 +1570,12 @@ const overlayUtils = {
     emptyOuter.className = 'personFilterScroller'
     const outer = options?.existingDiv || emptyOuter
 
+    const doNotShowList = []
+
     let counter = 1
     personList.forEach(fullPerson => {
-      const friendPict = overlayUtils.drawComplexFriend((overlayUtils.tempFriendObjFrom(fullPerson, null, options?.existingFriends)), purl, { failBorder: '2px solid purple' })
+      const tempFriendObj = overlayUtils.tempFriendObjFrom(fullPerson, null, options?.existingFriends)
+      const friendPict = overlayUtils.drawComplexFriend(tempFriendObj, purl, { failBorder: '2px solid purple' })
       friendPict.style.scale = 0.7
       // friendPict.firstChild.firstChild.onerror = (e) => { setTimeout(() => { e.target.style.border = '2px solid purple' }, 20); } // when not adding this
       friendPict.style.margin = '-8px -10px 0px 0px'
@@ -1538,10 +1588,28 @@ const overlayUtils = {
         outer.style.opacity = (wasSeen ? '0.5' : '1')
         outer.setAttribute('shown', (wasSeen ? 'false' : 'true'))
         const cardDiv = getParentWithClass(outer, 'cardOuter')
+        // nb technically wasSeen && doNotShowList could get out f sync -should clean up code to make less ugly
+        const fulldomainappedPerson = tempFriendObj.username + (tempFriendObj.serverurl ? ('@' + domainAppFromUrl(tempFriendObj.serverurl)) : '')
+        if (doNotShowList.indexOf(fulldomainappedPerson) > -1) {
+          doNotShowList.splice(doNotShowList.indexOf(fulldomainappedPerson), 1) 
+        } else if (!e.initExpandSection) { doNotShowList.push(fulldomainappedPerson) }
         if (cardDiv) {
-          const personDivs = cardDiv.querySelectorAll('[personid*="' + fullPerson + '"]')
-          const expandInitOption = e.initExpandSection ? { height: 'auto' } : null
-          personDivs.forEach(aDiv => { if (wasSeen) { collapseSection(aDiv) } else { expandSection(aDiv, expandInitOption) } })
+          const commentDivs = cardDiv.querySelectorAll('.vMessageCommentDetailsComment')
+          commentDivs.forEach(aDiv => {
+            const divPersons = aDiv.getAttribute('personid').split(',')
+            const expandInitOption = e.initExpandSection ? { height: 'auto' } : null
+            doNotShowList.forEach(doNotShowPerson => { 
+              if (divPersons.indexOf(doNotShowPerson) > -1) divPersons.splice(divPersons.indexOf(doNotShowPerson), 1) 
+            })
+            
+            for (let i = divPersons.length - 1; i >= 0; i--) { if (!divPersons[i]) divPersons.splice(i, 1) } // ugly hack for bug
+            if (divPersons.length === 0 && !e.initExpandSection) { // no one left so hide section
+              collapseSection(aDiv)
+            } else {
+              expandSection(aDiv, expandInitOption)
+            } 
+          })
+          // old -> const personDivs = cardDiv.querySelectorAll('[personid*="' + fullPerson + '"]')
         } else {
           console.warn('could not fund carddiv for ', { outer, fullPerson })
         }
@@ -1557,7 +1625,7 @@ const overlayUtils = {
   redrawFriendScrollerFor: function (purl, existingDiv) {
     const wip = vState.messages.wip[purl]
     const emptyOuter = overlayUtils.makeEl('div', null, {
-      height: '65px',
+      height: '75px',
       width: '100%',
       'overflow-y': 'hidden',
       'overflow-x': 'scroll',
@@ -1650,6 +1718,10 @@ const overlayUtils = {
       const recipients = overlayUtils.makeEl('div', null, { padding: '5px', color: 'purple' }, 'Send message to: ')
       wip.chosenFriends.forEach(friend => {
         const friendOuter = overlayUtils.makeEl('div', null, { 'padding-left': '5px' })
+        // ugly hack to resovlve inconsitency
+        if (!friend.username && friend.recipient_id) friend.username = friend.recipient_id
+        if (!friend.serverurl && friend.recipient_host) friend.serverurl = friend.recipient_host
+
         friendOuter.appendChild(overlayUtils.personPict(friend, null, { addSpace: true, width: '15px' }))
 
         const textOuter = overlayUtils.makeEl('span', null, { height: '12px' })
