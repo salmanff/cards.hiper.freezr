@@ -149,7 +149,6 @@ if (!isIos()) {
         log: vState.pageInfoFromPage, 
         defaultHashTag: vState.defaultHashTag,
         mainNoteSaver: async function (mark) {
-          console.log('mainnote saver started')
           vState.notesBoxTimer.lastKeyDown = new Date().getTime()
           const TIMELIMIT = 3000
           function delay(ms) { // from https://www.pentarem.com/blog/how-to-use-settimeout-with-async-await-in-javascript/
@@ -157,17 +156,14 @@ if (!isIos()) {
           }
           await delay(TIMELIMIT)
           const nowTime = new Date().getTime()
-          console.log('time diff:', (nowTime - vState.notesBoxTimer.lastKeyDown))
+          // onsole.log('time diff:', (nowTime - vState.notesBoxTimer.lastKeyDown))
           if (nowTime - vState.notesBoxTimer.lastKeyDown >= TIMELIMIT) {
-            console.log('saving from overlay main notes box saver')
             const purl = mark.purl
             const id = mark?._id // Should be different if it is a log ?
             const msg = 'saveMainComment'
             const response = await chrome.runtime.sendMessage({ msg, purl, notes: mark.vNote, props: mark, id })
-            console.log('got send message resp', { response })
             return response 
           } else {
-            console.log('wait to stop typing')
             return { success: true, note: 'not saving yet - waiting to stop typing'}
           }
         }
@@ -401,7 +397,7 @@ if (!isIos()) {
     }
 
     document.addEventListener('click', function (evt) { // actions from overlay
-      // onsole.log('click ', getParentWithId(evt.target, 'vulog_overlay_outer'))
+      // onsole.log('click ',{ class: evt.target?.className, isstring: typeof evt.target.className === 'string', idx: evt.target.className.indexOf(HIGHLIGHT_CLASS) }, getParentWithId(evt.target, 'vulog_overlay_outer'))
       const hrefNode = getParentWithTag(evt.target, 'A') 
       if (hrefNode && vState.edit_mode) {
         evt.preventDefault()
@@ -824,6 +820,7 @@ if (!isIos()) {
 
 // Change Highlight Box and functions
 vState.drawHighlightChangeOptionsBox = function (e) {
+  // onsole.log('drawHighlightChangeOptionsBox', { show: vState.showThis })
   if (vState.showThis === 'ownMark') {
     const hlightId = e.target.id.split('_')[2]
     const currentHColor = overlayUtils.mainColorOf(e.target.style.backgroundColor)
@@ -858,26 +855,33 @@ vState.drawHighlightChangeOptionsBox = function (e) {
       notesDiv.onpaste = function (evt) {
         pasteAsText(evt)
       }
-      notesDiv.onkeydown = function () {
-        document.getElementById('vulog_hlight_saveNote').className = 'vulog_dialogue_butts bluecol'
+      notesDiv.onkeydown = function (evt) {
+        if (evt.key === 'Enter'){ 
+          saveHlightComment()
+        } else {
+          document.getElementById('vulog_hlight_saveNote').className = 'vulog_dialogue_butts bluecol'
+        }
       }
       if (thehighLight.vNote && thehighLight.vNote !== '') notesDiv.innerText = thehighLight.vNote
       changeHighlightBox.appendChild(notesDiv)
 
       const saveDiv = overlayUtils.makeEl('div', 'vulog_hlight_saveNote', 'vulog_dialogue_butts')
       saveDiv.innerText = 'Save Comment'
-      saveDiv.onclick = function () {
+      const saveHlightComment = function () {
         const vCreated = new Date().getTime()
         const text = notesDiv.innerText.trim()
-        const theComment = { text, vCreated }
-        if (!thehighLight.vComments) thehighLight.vComments = []
-        thehighLight.vComments.push(theComment)
-        if (document.getElementById('vulog_hlight_' + thehighLight.id)) document.getElementById('vulog_hlight_' + thehighLight.id).className = HIGHLIGHT_CLASS + ' hlightComment'
-        if (!document.getElementById('vulog_hlight_' + thehighLight.id)) console.warn('could not get element with id ', document.getElementById(thehighLight.id))
-        chrome.runtime.sendMessage({ msg: 'addHLightComment', hlightId, text, vCreated, url: window.location.href }, function (response) {
-          vState.hideHighlighterDivs()
-        })
+        if (text != '') {
+          const theComment = { text, vCreated }
+          if (!thehighLight.vComments) thehighLight.vComments = []
+          thehighLight.vComments.push(theComment)
+          if (document.getElementById('vulog_hlight_' + thehighLight.id)) document.getElementById('vulog_hlight_' + thehighLight.id).className = HIGHLIGHT_CLASS + ' hlightComment'
+          if (!document.getElementById('vulog_hlight_' + thehighLight.id)) console.warn('could not get element with id ', document.getElementById(thehighLight.id))
+          chrome.runtime.sendMessage({ msg: 'addHLightComment', hlightId, text, vCreated, url: window.location.href }, function (response) {
+            vState.hideHighlighterDivs()
+          })
+        }
       }
+      saveDiv.onclick = saveHlightComment 
       changeHighlightBox.appendChild(saveDiv)
 
       const colorChanger = overlayUtils.makeEl('div', 'vulogIos_pallette_area_for_change', '')

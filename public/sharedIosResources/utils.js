@@ -7,6 +7,19 @@
 /* global expandSection, collapseSection, smallSpinner */ // from drawUtils
 /* global vState  */ // from view
 
+
+// TEMP - These aere required for ios Resources... 
+// const HIGHLIGHT_CLASS = 'VULOG--highlighter--highlighted'
+// const COLOR_MAP = { // sorry ugly
+// green: 'yellowgreen',
+// yellow: 'rgb(218, 218, 38)',
+// blue: 'lightskyblue',
+// pink: 'lightpink',
+// grey: 'lightgrey',
+// orange: 'lightsalmon'
+// // 'u' : 'underline'
+// }
+
 const MCSS = {
   LIGHT_GREY: 'rgb(151, 156, 160)',
   DARK_GREY: 'darkgrey',
@@ -77,10 +90,10 @@ const assignSenderIdAndHostFromFreezrMeta = (item) => {
   }
   return item
 }
-const assignDateTextFromCreatedDate = (item) => {
-  item.dateText = overlayUtils.dateOrTime(item.vCreated)
-  return item
-}
+// const assignDateTextFromCreatedDate = (item) => {
+//   item.dateText = overlayUtils.dateOrTime(item.vCreated)
+//   return item
+// }
 
 const mergeHistoryItems = function (item1, item2) {
   if (!item1) return item2
@@ -143,7 +156,8 @@ const convertMarkToSharable = function (mark, options) {
   // options: excludeHlights, excludeHlightComments
   if (!mark) return null
   const newmark = { vHighlights: [], vNote: '', vStars: [] }
-  const ToTransfer = ['url', 'purl', 'description', 'domainApp', 'title', 'author', 'image', 'keywords', 'vulog_favIconUrl']
+  const ToTransfer = ['url', 'purl', 'description', 'domainApp', 'title', 'author', 'image', 'keywords', 'vulog_favIconUrl', 'published', 'modified']
+  // add 'type'??
   ToTransfer.forEach((item) => {
     if (mark[item]) {
       newmark[item] = JSON.parse(JSON.stringify(mark[item]))
@@ -160,9 +174,9 @@ const convertMarkToSharable = function (mark, options) {
         const vComments = JSON.parse(JSON.stringify(hl.vComments))
         hl.vComments = []
         hl.vComments = vComments
-          .filter(isOwnComment)
+          // .filter(isOwnComment)
           .map(assignSenderIdAndHostFromFreezrMeta)
-          .map(assignDateTextFromCreatedDate)
+          // .map(assignDateTextFromCreatedDate)
         // vComments.forEach((vComment) => {
           // vComment.dateText = overlayUtils.dateOrTime(vComment.vCreated)
           // if (isOwnComment(vComment)) {
@@ -193,7 +207,7 @@ const convertDownloadedMessageToRecord = function (downloadedMessage) {
   downloadedMessage.record.vCreated = downloadedMessage._date_created
 
   if (!downloadedMessage.record.vComments) downloadedMessage.record.vComments = [] // should not happen
-  structuredClone
+  
   if (!downloadedMessage.record.vComments || downloadedMessage.record.vComments.length === 0) {
     console.warn('SNBH!!!! no vComments ', downloadedMessage)
     downloadedMessage.record.vComments = []
@@ -351,9 +365,13 @@ const addMissingSendersToHLights = function (vHighlights, messageItem) {
   return vHighlights
 }
 const isOwnComment = function (vComment) {
-  return ((vComment?.sender_id && vComment?.sender_id === freezrMeta?.userId && vComment?.sender_host && vComment?.sender_host === freezrMeta?.serverAddress) ||
-    (!vComment?.sender_id && !vComment?.sender_host && !vComment?.recipient_id && !vComment?.recipient_host))
-  // temp for debug
+  if (!vComment?.sender_id) return true
+  return (vComment.sender_id === freezrMeta?.userId && (!vComment?.sender_host || (vComment?.sender_host === freezrMeta?.serverAddress)))
+
+  // old version - deleted without full tsting 2024-12
+  // return ((vComment?.sender_id && vComment?.sender_id === freezrMeta?.userId && vComment?.sender_host && vComment?.sender_host === freezrMeta?.serverAddress) ||
+  //   (!vComment?.sender_id && !vComment?.sender_host && !vComment?.recipient_id && !vComment?.recipient_host))
+
 }
 
 const markMsgHlightsAsMarked = function (markHlights, msgHlights) {
@@ -969,9 +987,7 @@ const overlayUtils = {
       notesDiv.onpaste = function (evt) {
         pasteAsText(evt)
       }
-      notesDiv.onkeydown = function (e) {
-        e.target.nextSibling.className = 'vulog_dialogue_butts bluecol'
-      }
+
       // if (hLight.vNote && hLight.vNote !== '') notesDiv.innerText = hLight.vNote ;  hLight.vNote = null // transitional
       outer.appendChild(notesDiv)
 
@@ -991,18 +1007,17 @@ const overlayUtils = {
 
       const saveDiv = overlayUtils.makeEl('div', null, 'vulog_dialogue_butts')
       saveDiv.innerText = 'Save Comment'
-      saveDiv.onclick = async function (evt) {
-        const resp = await options.hLightCommentSaver(hLight, evt.target.previousSibling.innerText, { purl: options.purl, mark: options.markOnMarks }) // , mark: options.mark
+      const saveHlightComment = async function () {
+        const resp = await options.hLightCommentSaver(hLight, notesDiv.innerText, { purl: options.purl, mark: options.markOnMarks }) // , mark: options.mark
         if (!resp || resp.error) {
-          let errBox = evt.target.nextSibling
+          let errBox = saveDiv.target.nextSibling
           if (!errBox) {
             errBox = overlayUtils.makeEl('div', null, 'noteErrBox')
-            evt.target.parentElement.appendChild(errBox)
+            saveDiv.parentElement.appendChild(errBox)
           }
           errBox.innerText = 'Error saving ... ' + (resp?.msg || 'sorry!')
           console.warn((resp ? resp.error : 'error saving note'))
         } else {
-          const notesDiv = evt.target.previousSibling
           notesDiv.innerText = ''
           notesDiv.parentElement.parentElement.style.display = 'none'
           notesDiv.nextSibling.className = 'vulog_dialogue_butts'
@@ -1011,7 +1026,19 @@ const overlayUtils = {
           notesDiv.parentElement.parentElement.previousSibling.previousSibling.appendChild(overlayUtils.drawCommentsSection(purl, hLight))
         }
       }
+      notesDiv.onkeydown = async function (e) {
+        if (e.key === 'Enter'){ 
+          await saveHlightComment()
+        } else {
+          e.target.nextSibling.className = 'vulog_dialogue_butts bluecol'
+        }
+      }
+      saveDiv.onclick = async function (evt) {
+        await saveHlightComment()
+      }
       outer.appendChild(saveDiv)
+
+        
     }
 
     return outer
@@ -1129,7 +1156,7 @@ const overlayUtils = {
       const recipientsWithProblems = []
       vComment.recipients.forEach(recipient => {
         const name = recipient.recipient_id + (recipient.recipient_host ? '@' + recipient.recipient_host : '')
-        if (vComment.recipientStatus[name].status != 'verified') recipientsWithProblems.push(overlayUtils.fullRecipientName(recipient))
+        if (!vComment.recipientStatus[name] || vComment.recipientStatus[name].status != 'verified') recipientsWithProblems.push(overlayUtils.fullRecipientName(recipient))
       })
       if (recipientsWithProblems.length > 0) {
         bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'left', color: 'red' }, 'Message delivery failed for ' + recipientsWithProblems.join(',') + '.'))
@@ -1156,7 +1183,7 @@ const overlayUtils = {
     return oneComment
   },
   receipientIsUser: function (recipient) {
-    return (recipient.recipient_id === vState.freezrMeta.userId &&
+    return (recipient.recipient_id === vState.freezrMeta?.userId &&
       (!recipient.recipient_host || recipient.recipient_host === vState.freezrMeta.serverAddress))
   },
   // messaging -> // todo - why use wip?
@@ -1528,13 +1555,13 @@ const overlayUtils = {
   allReceipientAndSenderNames: function (hLightOrComment) {
     const names = []
     const sender = overlayUtils.fullSenderName(hLightOrComment)
-    if (sender !== vState.freezrMeta.userId && names.indexOf(sender) === -1) names.push(sender)
+    if (sender !== vState.freezrMeta?.userId && names.indexOf(sender) === -1) names.push(sender)
     const receiver = overlayUtils.fullRecipientName(hLightOrComment)
-    if (receiver !== vState.freezrMeta.userId && names.indexOf(receiver) === -1) names.push(receiver)
+    if (receiver !== vState.freezrMeta?.userId && names.indexOf(receiver) === -1) names.push(receiver)
     if (hLightOrComment.recipients && hLightOrComment.recipients.length > 0) {
       hLightOrComment.recipients.forEach(recipient => {
         const recipientName = overlayUtils.fullRecipientName(recipient)
-        if (recipientName !== vState.freezrMeta.userId && names.indexOf(recipientName) === -1) names.push(recipientName)
+        if (recipientName !== vState.freezrMeta?.userId && names.indexOf(recipientName) === -1) names.push(recipientName)
       })
     }
     return names

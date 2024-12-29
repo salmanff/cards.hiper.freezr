@@ -7,7 +7,7 @@
 let freezrMeta = null // used to pass onto overlay => utils to see if isOwnComment
 
 const initiateHighlights = function () {
-  if (!vState.pageInfoFromPage.isiframe) {
+  if (vState.pageInfoFromPage && !vState.pageInfoFromPage.isiframe) {
     const overlayOuter = overlayUtils.makeEl('div', 'vulog_overlay_outer', 'cardOuter', '')
     overlayOuter.style.display = 'none'
     document.body.appendChild(overlayOuter)

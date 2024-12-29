@@ -1,6 +1,6 @@
 // vulog constants for overlay etc
 
-var HIGHLIGHT_CLASS = 'VULOG--highlighter--highlighted' 
+const HIGHLIGHT_CLASS = 'VULOG--highlighter--highlighted'
 
 const COLOR_MAP = { // sorry ugly
   green: 'yellowgreen',

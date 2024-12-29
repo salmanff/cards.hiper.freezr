@@ -2278,6 +2278,12 @@ drawSharingSubsection._privatefeed = function (purl, options) {
       const feedName = feedCode.name
       const feedDiv = dg.div()
       const feedMark = getFeedMark(purl, feedName)
+
+      const nameA= dg.a({ style: { 'font-weight': 'bold' } }, feedName + ':')
+      nameA.href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + ('/public?feed=' + feedName + '&code=' + feedCode.code)
+      nameA.target = '_blank'
+      feedDiv.appendChild(dg.div({ style: { 'margin-top': '10px'}}, nameA))
+
       if (!feedMark) {
         const button = lister.makePublicShareButton(
           {
@@ -2315,8 +2321,6 @@ drawSharingSubsection._privatefeed = function (purl, options) {
         )
         button.style.width = '50px'
         const holder = dg.div({ style: { display: 'grid', 'grid-template-columns': '1fr 70px' , 'border-bottom': '1px solid grey'} })
-        holder.appendChild(dg.div({ style: { 'font-weight': 'bold' } }, feedName + ':'))
-        holder.appendChild(dg.div({ style: { 'font-weight': 'bold' } }, ' '))
         const box = overlayUtils.editableBox({ placeHolderText: 'Enter comments' }, async function (e) { })
         box.style['max-height'] = '100px'
         holder.appendChild(box)
@@ -2381,10 +2385,15 @@ drawSharingSubsection._privatefeed = function (purl, options) {
           }
         })
 
+        feedDiv.appendChild(dg.div({ style: { } }, 'The link has already been posted to ' + feedName + '.'))
         const holder = dg.div({ style: { display: 'grid', 'grid-template-columns': '1fr 70px 70px' } })
-        holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, feedName + ':'))
-        holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, ' '))
-        holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, ' '))
+        // const nameA= dg.a({ style: { 'font-weight': 'bold'} }, feedName + ':')
+        // nameA.href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + ('/public?feed=' + feedName + '&code=' + feedCode.code)
+        // nameA.target = '_blank'
+        // holder.appendChild(nameA)
+
+        // holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, ' '))
+        // holder.appendChild(dg.span({ style: { 'font-weight': 'bold' } }, ' '))
         const box = overlayUtils.editableBox({ placeHolderText: 'Enter comments' }, async function (e) { })
         box.style['max-height'] = '100px'
         if (feedMark.vComments && feedMark.vComments.length > 0) box.innerText = feedMark.vComments[0].text
