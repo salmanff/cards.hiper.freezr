@@ -143,7 +143,7 @@ function recursiveWrapper (container) {
           if (i === startIndex) newText += DELIMITERS.start
           if (charsHighlighted === selectionLength) {
             newText += DELIMITERS.end
-            newText += element.nodeValue.substr(i)
+            newText += element.nodeValue.substring(i)
             break
           }
 

@@ -374,6 +374,11 @@ const isOwnComment = function (vComment) {
 
 }
 
+const isOwnHighlight = function (highlight) {
+  // takes same format as vComment
+  return isOwnComment(highlight)
+}
+
 const markMsgHlightsAsMarked = function (markHlights, msgHlights) {
   if (!msgHlights || msgHlights.length === 0) return []
 
@@ -488,8 +493,8 @@ const isIos = function () {
     (navigator.userAgent.includes('Mac') && 'ontouchend' in document)
 }
 
-const mapColor = function (hcolor) {
-  return COLOR_MAP[hcolor] || hcolor
+const mapColor = function (hColor) {
+  return COLOR_MAP[hColor] || hColor
 }
 
 const newHlightIdentifier = function () {
@@ -541,7 +546,7 @@ const overlayUtils = {
       if (classNameOrStyle) el.className = classNameOrStyle
     } else if (classNameOrStyle !== null && typeof classNameOrStyle === 'object') {
       for (const [key, value] of Object.entries(classNameOrStyle)) {
-        el.style[key] = value
+        el.style.setProperty(key, value)
       }
     }
     if (text) el.innerText = text
@@ -637,8 +642,6 @@ const overlayUtils = {
   drawstar: function (aStar, mark, options = {}) {
     // options: defaultHashtag, notesDivForHashtag, logToConvert
     // showBookmark: bool, drawTrash: bool, trashFloatHide bool, markOnBackEnd: function
-    // if (!mark && !options?.logToConvert) console.warn('cannot draw stars without mark or log: ', { mark, options })
-    
 
     const isMarked = Boolean(mark?._id)
     const purl = mark?.purl || options?.purl || options?.log?.purl
@@ -804,56 +807,61 @@ const overlayUtils = {
     // options: include_delete include_delete: true, show_display_errs: false, overLayClick, showErr, showTwoLines: false, hLightCommentSaver, hLightDeleter
     // innerHighs.appendChild(overlayUtils.drawHighlight(purl, hlight, { include_delete: true, hLightCommentSaver: options.hLightCommentSaver, hLightDeleter: options.hLightDeleter, markOnBackEnd: options.markOnBackEnd, markOnMarks: options.markOnMarks, logToConvert: options.logToConvert  }))
 
-    const theColor = ((hLight.color && COLOR_MAP[hLight.color]) ? COLOR_MAP[hLight.color] : 'yellowgreen')
+    const theColor = ((hLight.color && COLOR_MAP[hLight.color]) ? COLOR_MAP[hLight.color] : THEME_COLORS.primary)
     if (!options) options = {}
     // if (!options.markOnBackEnd) options.markOnBackEnd = markOnBackEndForExtenstion
 
-    const deleteButtOuter = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'center', padding: '10px', display: 'none' })
-    const deleteButt = overlayUtils.makeEl('div', null, 'quote_delete', 'Remove Highlight')
-    if (!options.hLightDeleter) {
-      options.hLightDeleter = async function (hLight, mark, options) {
-        const response = await chrome.runtime.sendMessage({ msg: 'removeHighlight', url: purl, hlightId: hLight.id, mark })
-        if (!response || !response.success) {
-          // do nothing
-        } else if (options?.showTwoLines) { // ie from overlay
-          console.error('todo - need to refresh page and show ')
-        } else if (chrome?.tabs?.query) { // for extension overlay only
-          chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-            chrome.tabs.sendMessage(tabs[0].id, { action: 'refresh' }, function (resp2) {
-              if (response?.error && options?.button) options.button.innerText = 'Internal error - please close and re-open'
+    const isOwn = vState?.showThis === 'ownMark' || !vState?.showThis // ie latter for popup and cards page (index)
+    // onsole.log('isOwn', { isOwn, showThis: vState?.showThis, vState })
+    const deleteButtOuter = overlayUtils.makeEl('div', null, isOwn ? { width: '100%', 'text-align': 'center', padding: '10px', display: 'none' }: null)
+    if (isOwn) {
+      const deleteButt = overlayUtils.makeEl('div', null, 'quote_delete', 'Remove Highlight')
+      if (!options.hLightDeleter) {
+        options.hLightDeleter = async function (hLight, mark, options) {
+          const response = await chrome.runtime.sendMessage({ msg: 'removeHighlight', url: purl, hlightId: hLight.id, mark })
+          if (!response || !response.success) {
+            // do nothing
+          } else if (options?.showTwoLines) { // ie from overlay
+            console.error('todo - need to refresh page and show ')
+          } else if (chrome?.tabs?.query) { // for extension overlay only
+            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+              chrome.tabs.sendMessage(tabs[0].id, { action: 'refresh' }, function (resp2) {
+                if (response?.error && options?.button) options.button.innerText = 'Internal error - please close and re-open'
+              })
             })
-          })
+          }
+          return response
         }
-        return response
       }
-    }
-    // deleteButt.setAttribute('hlightId', hlight.id)
-    deleteButt.onclick = async function (e) {
-      if (e.target.className.includes('quote_delete_confirm')) {
-        // const hlightId = this.getAttribute('hlightId')
-        const response = await options.hLightDeleter(hLight, options?.markOnMarks, { button: e.target.parentElement.parentElement })
+      // deleteButt.setAttribute('hlightId', hlight.id)
+      deleteButt.onclick = async function (e) {
+        if (e.target.className.includes('quote_delete_confirm')) {
+          // const hlightId = this.getAttribute('hlightId')
+          const response = await options.hLightDeleter(hLight, options?.markOnMarks, { button: e.target.parentElement.parentElement })
 
-        e.target.parentElement.parentElement.style.color = 'red'
-        e.target.parentElement.parentElement.style['text-align'] = 'center'
+          e.target.parentElement.parentElement.style.color = 'red'
+          e.target.parentElement.parentElement.style['text-align'] = 'center'
 
-        if (!response || !response.success) {
-          e.target.parentElement.parentElement.innerHTML = 'Error'
-          console.warn('Error trying to delete highlight (' + response.error + ')')
+          if (!response || !response.success) {
+            e.target.parentElement.parentElement.innerHTML = 'Error'
+            console.warn('Error trying to delete highlight (' + response.error + ')')
+          } else {
+            const parentEl = e.target.parentElement.parentElement
+            parentEl.innerHTML = 'REMOVED'
+            if (parentEl.nextSibling) parentEl.nextSibling.style.display = 'none'
+            if (parentEl.nextSibling?.nextSibling) parentEl.nextSibling.nextSibling.style.display = 'none'
+            // should refresh page if tab is showing
+          }
         } else {
-          const parentEl = e.target.parentElement.parentElement
-          parentEl.innerHTML = 'REMOVED'
-          if (parentEl.nextSibling) parentEl.nextSibling.style.display = 'none'
-          if (parentEl.nextSibling?.nextSibling) parentEl.nextSibling.nextSibling.style.display = 'none'
-          // should refresh page if tab is showing
+          setTimeout(() => {
+            e.target.className = 'quote_delete quote_delete_confirm'
+            e.target.innerText = 'Press again to confirm deleting highlight'
+          }, 250)
         }
-      } else {
-        setTimeout(() => {
-          e.target.className = 'quote_delete quote_delete_confirm'
-          e.target.innerText = 'Press again to cofnirm deleting highlight'
-        }, 250)
       }
+      deleteButtOuter.appendChild(deleteButt)
+      deleteButtOuter.style.display = 'none'
     }
-    deleteButtOuter.appendChild(deleteButt)
 
     const quoteSection = function (text, theColor) {
       const outer = overlayUtils.makeEl('div', null, { display: 'grid', color: theColor, 'grid-template-columns': '5px 1fr 5px', 'margin-right': '5px' })
@@ -862,9 +870,10 @@ const overlayUtils = {
       if (options?.showTwoLines) {
         quoteInner.style.cursor = 'pointer'
         quoteInner.style.overflow = 'hidden'
-        quoteInner.style['max-height'] = '32px'
+        quoteInner.style['line-height'] = '1.1'
+        quoteInner.style.height = '2.5em' // Exactly 2 lines (2 * 1.1em line-height +.3 "edge" adjustment)
         quoteInner.style['text-overflow'] = 'ellipsis'
-        quoteInner.style['margin-bottom'] = '5px'
+        quoteInner.style['margin-bottom'] = '10px'
       }
       if (options.overLayClick) quoteInner.onclick = options.overLayClick // vState.scrollToHighLight(hlight.id)
       outer.appendChild(quoteInner)
@@ -887,7 +896,7 @@ const overlayUtils = {
 
 
     if (!options?.noThreeDots) {
-      const threeDots = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'right', color: 'blue', 'font-size': '24px', 'margin-top': '-10px', 'margin-bottom': '5px' })
+      const threeDots = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'right', color: THEME_COLORS.secondary, 'font-size': '24px', 'margin-top': '-10px', 'margin-bottom': '5px' })
       const threeDotsInner = overlayUtils.makeEl('span', null, { 'margin-right': '10px', height: '20px', size: '40px', cursor: 'pointer', 'font-weight': 'bold' }, '...')
       threeDotsInner.onclick = function (e) {
         e.target.parentElement.nextSibling.style.display = 'block'
@@ -904,14 +913,12 @@ const overlayUtils = {
 
     // options.noteSaver = options.hLightCommentSaver
     options.purl = purl
-    // if (!options.hLightCommentSaver) console.error('drawHighligh - No hLightCommentSaver for ', { purl, hLight, options })
 
     notesBoxOuter.append(overlayUtils.drawHlightCommentsBox(purl, hLight, options))
     retDiv.append(notesBoxOuter)
 
     commentsOuter.appendChild(deleteButtOuter)
     
-
     const highlightOuter = options?.existingDiv || overlayUtils.makeEl('div', null, 'highlightOuter')
     if (hLight.sender_id) {
       if (options?.type === 'msgHighLights') highlightOuter.setAttribute('personId', overlayUtils.fullPersonString(hLight.sender_id, hLight.sender_host))
@@ -929,19 +936,17 @@ const overlayUtils = {
     return highlightOuter
   },
   drawHlightCommentsBox: function (purl, hLight, options) {
-    // if (!options.hLightCommentSaver) console.error('drawHlightCommentsBox - No hLightCommentSaver for ', { purl, hLight, options })
-
     // options has to haev purl & mark and from non overlay, needs noteSaver
     // markOnBackEnd: options.markOnBackEnd, markOnMarks: options.markOnMarks, logToConvert: options.logToConvert
 
     const outer = overlayUtils.makeEl('div', null, null)
 
-    if (!hLight._isMarked && !options.isOwn) { // _isMarked is from msgs and isown is from markOnMarks / overlay
+    if (!options.isOwn) {
       const addToMarks = overlayUtils.makeEl('div', null, 'vulog_dialogue_butts bluecol')
       addToMarks.innerText = 'Bookmark highlight'
       addToMarks.onclick = async function (e) {
         const eltoMark = e.target.parentElement.parentElement
-        const resultMessage = overlayUtils.makeEl('div', null, { color: 'red', margin: '5px' })
+        const resultMessage = overlayUtils.makeEl('div', null, { color: THEME_COLORS.danger, margin: '5px' })
         try {
           if (!options.markOnMarks && !options.logToConvert) throw new Error('need to be able to covert a log if none exist')
           if (!options.markOnMarks) {
@@ -960,20 +965,19 @@ const overlayUtils = {
               }
             })
           }
-          const hLightAddRet = await chrome.runtime.sendMessage({ url: options.purl, highlight: hLight, msg: 'newHighlight', props: options.markOnMarks })
+          const hLightAddRet = await chrome.runtime.sendMessage({ purl: options.purl, highlight: hLight, msg: 'newHighlight', props: options.markOnMarks })
           if (!hLightAddRet || !hLightAddRet.success) {
             throw new Error('unable to send message')
           } else {
             resultMessage.innerText = 'Bookmark added.'
             e.target.style.display = 'none'
             options.existingDiv = getParentWithClass(e.target, 'highlightOuter')
-            hLight._isMarked = true
             //resultMessage.onclick = () => { overlayUtils.drawHighlight(purl, hLight, options) }
           }
           eltoMark.insertBefore(resultMessage, eltoMark.firstChild);
         } catch (err) {
           console.error('caught error in adding hlight to marks ', { err, options })
-          addToMarks.after(overlayUtils.makeEl('div', null, { color: 'red', margin: '10px' }, 'Error bookmarking highlight - sorry'))
+          addToMarks.after(overlayUtils.makeEl('div', null, { color: THEME_COLORS.danger, margin: '10px' }, 'Error bookmarking highlight - sorry'))
         }
         // need to mark if mark doesnt exist and also add it to the new note below... and also add the hlight to the mark
         // need to need to so hlightonbackend like markonbackend
@@ -992,7 +996,7 @@ const overlayUtils = {
       outer.appendChild(notesDiv)
 
       if (!options.hLightCommentSaver) {
-        // console.error('No hLightCommentSaver for ', { purl, hLight, options })
+        // console.warn('No hLightCommentSaver - creating one for ', { purl, hLight, options })
         options.hLightCommentSaver = async function (hLight, text, options) { // purl, noteSaver
           // need to create mark if not exists
           if (!hLight || !text || (!options.purl && !options.mark)) return { error: true, msg: 'need hlight text to process' }
@@ -1152,14 +1156,14 @@ const overlayUtils = {
       color: 'darkgray'
     })
 
-    if (vComment.recipientStatus && vComment.recipients && vComment.recipients.length > 0) {
+    if (vComment.recipientStatus && vComment.recipientStatus && vComment.recipientStatus.length > 0) {
       const recipientsWithProblems = []
-      vComment.recipients.forEach(recipient => {
+      vComment.recipientStatus.forEach(recipient => {
         const name = recipient.recipient_id + (recipient.recipient_host ? '@' + recipient.recipient_host : '')
         if (!vComment.recipientStatus[name] || vComment.recipientStatus[name].status != 'verified') recipientsWithProblems.push(overlayUtils.fullRecipientName(recipient))
       })
       if (recipientsWithProblems.length > 0) {
-        bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'left', color: 'red' }, 'Message delivery failed for ' + recipientsWithProblems.join(',') + '.'))
+        bottomLine.appendChild(overlayUtils.makeEl('div', null, { float: 'left', color: THEME_COLORS.danger }, 'Message delivery failed for ' + recipientsWithProblems.join(',') + '.'))
       }
     }
 
@@ -1167,11 +1171,11 @@ const overlayUtils = {
     const bottomLineText = overlayUtils.makeEl('div', null, { overflow: 'hidden', height: '12px', 'text-overflow': 'ellipsis', 'margon-right': '5px' })
     if (vComment.hLightCopy) {
       bottomLineText.style.color = mapColor(vComment.hLightCopy.color)
-      // bottomLine.appendChild(d g div({ style: { color: mapColor(vComment.hLightCopy.color), overflow: 'hidden', height: '12px', 'text-overflow': 'ellipsis', 'margon-right': '5px' }}, '“' + vComment.hLightCopy.string + '”'))
-      bottomLineText.innerText = '“' + vComment.hLightCopy.string + '”'
+      // bottomLine.appendChild(d g div({ style: { color: mapColor(vComment.hLightCopy.color), overflow: 'hidden', height: '12px', 'text-overflow': 'ellipsis', 'margon-right': '5px' }}, '"' + vComment.hLightCopy.string + '"')
+      bottomLineText.innerText = '"' + vComment.hLightCopy.string + '"'
     } else if (vComment.hLightsCopy && vComment.hLightsCopy.length === 1) {
       bottomLineText.style.color = mapColor(vComment.hLightsCopy[0].color)
-      bottomLineText.innerText = vComment.hLightsCopy[0].string ? ('“' + vComment.hLightsCopy[0].string + '”') : ('1 Highlight')
+      bottomLineText.innerText = vComment.hLightsCopy[0].string ? ('"' + vComment.hLightsCopy[0].string + '"') : ('1 Highlight')
     } else if (vComment.hLightsCopy) {
       bottomLineText.style.color = 'green'
       bottomLineText.innerText = (vComment.hLightsCopy.length + ' highlights')
@@ -1285,7 +1289,7 @@ const overlayUtils = {
       const messageSharingArea = cardParent.querySelector('.sharingArea_messages')
       if (messageSharingArea) messageSharingArea.setAttribute('vStateChanged', 'true')
 
-      const result = overlayUtils.makeEl('div', null, { padding: '10px', color: 'red' })
+      const result = overlayUtils.makeEl('div', null, { padding: '10px', color: THEME_COLORS.danger })
       if (erroredSends.length === 0) {
         result.innerText = 'Your message was sent successfully!'
       } else if (!successFullSends || successFullSends.length === 0) {
@@ -1370,7 +1374,7 @@ const overlayUtils = {
       const unReadDiv = overlayUtils.makeEl('div', null, null, null)
       unReadDiv.appendChild(overlayUtils.makeEl('div', null, { color: 'purple', 'font-weight': 'bold', 'font-size': '20px', 'text-align': 'center' }, unreadMsgCount + ' new message' + (unreadMsgCount > 1 ? 's' : '') + '!'))
       unReadDiv.appendChild(overlayUtils.makeEl('span', null, { }, (numReceivedComments > 1 ? ('Latest: ') : '... ')))
-      markRead = overlayUtils.makeEl('span', null, { color: 'blue', cursor: 'pointer', float: 'right' }, ' (Mark' + (unreadMsgCount > 1 ? ' all' : '') + ' as read)')
+      markRead = overlayUtils.makeEl('span', null, { color: THEME_COLORS.secondary, cursor: 'pointer', float: 'right' }, ' (Mark' + (unreadMsgCount > 1 ? ' all' : '') + ' as read)')
       markRead.onclick = async function (e) {
         const resp = await vState.markMsgAsRead(msgRecord.stats.unreadMsgIds)        
         
@@ -1464,18 +1468,53 @@ const overlayUtils = {
     return data
   },
   shortDomainApp: function (person) {
-    return ((person.recipient_host && person.recipient_host !== vState.freezrMeta.serverAddress) ? ('@' + domainAppFromUrl(person.recipient_host)) : '')
+    return ((person.recipient_host && person.recipient_host !== vState?.freezrMeta?.serverAddress) ? ('@' + domainAppFromUrl(person.recipient_host)) : '')
   },
   // persons and pictures
   personOneLiner: function (peopleAsRecipients, received, options) {
     
-    const oneLiner = overlayUtils.makeEl('div', null, { overflow: 'hidden', 'white-space': 'nowrap', color: MCSS.PURPLE, 'padding-left': '4px' })
+    const oneLiner = overlayUtils.makeEl('div', null, { 
+      overflow: 'hidden', 
+      'white-space': 'nowrap', 
+      color: MCSS.PURPLE, 
+      'padding-left': '4px', 
+      'margin-top': '10px',
+      display: 'flex',
+      'align-items': 'center',
+      'flex-direction': received ? 'row' : 'row-reverse'
+    })
+    
     if (peopleAsRecipients && peopleAsRecipients.length > 0) {
-      const floater = overlayUtils.makeEl('span', null, { float: (received ? '' : 'right') })
-      peopleAsRecipients.forEach(person => {
-        floater.appendChild(overlayUtils.personPict(person.recipient_id, person.recipient_host))
+      // Create container for pictures
+      const picturesContainer = overlayUtils.makeEl('div', null, { 
+        display: 'flex', 
+        'align-items': 'center',
+        'flex-shrink': 0
+        // 'margin-right': received ? '8px' : '0px',
+        // 'margin-left': received ? '0px' : '8px'
       })
-      oneLiner.appendChild(floater)
+      
+      let onlyPersonPict = null 
+      peopleAsRecipients.forEach(person => {
+        const onePersonPict = overlayUtils.personPict(person.recipient_id, person.recipient_host, {
+          width: '25px',
+          onerror: function(e) {
+            e.target.style.display = 'none'
+            // When image fails, adjust spacing to utilize the space
+            const parent = e.target.parentElement
+            if (parent && parent.children.length === 1) {
+              // If this was the only picture, remove the container's margin
+              parent.style.margin = '0'
+            }
+          }
+        })
+        if (peopleAsRecipients.length === 1) onlyPersonPict = onePersonPict
+        picturesContainer.appendChild(onePersonPict)
+      })
+      
+      oneLiner.appendChild(picturesContainer)
+      
+      // Create text container with proper truncation
       let texterText = ''
       if (peopleAsRecipients.length > 1) {
         peopleAsRecipients.forEach(person => { texterText += person.recipient_id + overlayUtils.shortDomainApp(person) + ', ' })
@@ -1483,10 +1522,17 @@ const overlayUtils = {
       } else {
         texterText = peopleAsRecipients[0].recipient_id + overlayUtils.shortDomainApp(peopleAsRecipients[0])
       }
-      // floater.appendChild(dg.div(JSON.stringify(peopleAsRecipients)))
-      const texter = overlayUtils.makeEl('span', null, { 'font-weight': 'bold', 'margin-top': '10px', display: 'inline-block' }, ((received ? 'From ' : 'To ') + texterText)) // (options?.nofrom ? '' : (received ? 'From ' : 'To ')), texterText)
-      // if (personHost) texter.appendChild(overlayUtils.makeEl('span', null, null, (' @ ' + domainAppFromUrl(personHost))))
-      oneLiner.appendChild(texter)
+      
+      const textContainer = overlayUtils.makeEl('div', null, { 
+        'font-weight': 'bold', 
+        'overflow': 'hidden',
+        'text-overflow': 'ellipsis',
+        'white-space': 'nowrap',
+        'flex': '1',
+        'min-width': '0' // Allows flex item to shrink below content size
+      }, ((received ? 'From ' : 'To ') + texterText))
+      
+      oneLiner.appendChild(textContainer)
     } 
     // else {
     //   const floater = overlayUtils.makeEl('span', null, { float: (received ? '' : 'right') })
@@ -1541,7 +1587,7 @@ const overlayUtils = {
   fullSenderName: function (hLightOrComment) {
     if (!hLightOrComment || !hLightOrComment.sender_id) return null
     let text = hLightOrComment.sender_id
-    if (hLightOrComment.sender_host && hLightOrComment.sender_host !== vState.freezrMeta.serverAddress) text += ('@' + domainAppFromUrl(hLightOrComment.sender_host))
+    if (hLightOrComment.sender_host && hLightOrComment.sender_host !== vState.freezrMeta?.serverAddress) text += ('@' + domainAppFromUrl(hLightOrComment.sender_host))
     return text // hLightOrComment.sender_id + (hLightOrComment.sender_host ? ('@' + hLightOrComment.sender_host) : '')
   },
   fullRecipientName: function (hLightOrComment) {
@@ -1785,7 +1831,17 @@ const overlayUtils = {
   drawColorTable: function (chosenColor) {
     const hLightChosenColor = function (box, chosenHColor) {
       for (const colorChoice of box.children) {
-        colorChoice.style.border = '2px solid ' + (((colorChoice.style['background-color'] === COLOR_MAP[chosenHColor])) ? 'darkgrey' : 'white')
+        const bgColor = colorChoice.style['background-color']
+        const mapColor = COLOR_MAP[chosenHColor]
+        const rgbMatch = bgColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+        const hexToRgb = (hex) => {
+          const r = parseInt(hex.slice(1,3), 16)
+          const g = parseInt(hex.slice(3,5), 16) 
+          const b = parseInt(hex.slice(5,7), 16)
+          return `rgb(${r}, ${g}, ${b})`
+        }
+        const isMatch = rgbMatch ? (hexToRgb(mapColor) === bgColor) : (bgColor === mapColor)
+        colorChoice.style.border = '2px solid ' + (isMatch ? 'darkgrey' : 'white')
       }
     }
 
@@ -1801,6 +1857,14 @@ const overlayUtils = {
     }
     hLightChosenColor(colorTable, chosenColor)
     return colorTable
+  },
+  // Force opacity 1 on all child elements
+  forceOpacityOnChildren: (element) => {
+    element.style.setProperty('opacity', '1', 'important')
+    // element.style.setProperty('z-index', '999999', 'important')
+    for (const child of element.children) {
+      overlayUtils.forceOpacityOnChildren(child)
+    }
   }
 }
 
@@ -1872,16 +1936,6 @@ function getPublishedDate (obj) {
     return 0 // error
   }
 }
-// const dateCreatedSorter = function (obj1, obj2) {
-//   if (!obj1 || ! obj2) {
-//     console.warn('trying to sort on an empty object ', { obj1, obj2 })
-//     return 0
-//   }
-//   const date1 = obj1.vCreated || obj1._date_created
-//   const date2 = obj2.vCreated || obj2._date_created
-//   if (date1 < date2) return 1
-//   return -1
-// }
 const dateLatestMessageSorter = function (obj1, obj2) {
   const date1 = obj1.vLatestMsg || obj1._date_modified
   const date2 = obj2.vLatestMsg || obj2._date_modified
@@ -1905,6 +1959,115 @@ function getModifiedDate (obj) {
     return 0 // error
   }
 }
+
+// Sort highlights by their position in the document (top to bottom)
+function sortHighlightsByPosition(highlights) {
+  if (!highlights || highlights.length === 0) return highlights
+  
+  return highlights.sort((h1, h2) => {
+    // For PDF highlights, use page number and y-coordinate
+    if (h1.pageNumber && h2.pageNumber) {
+      // First sort by page number
+      if (h1.pageNumber !== h2.pageNumber) {
+        return h1.pageNumber - h2.pageNumber
+      }
+      // Then by y-coordinate within the same page
+      if (h1.coordinates && h2.coordinates) {
+        return h1.coordinates.top - h2.coordinates.top
+      }
+      return 0
+    }
+    
+    // For regular web page highlights, compare using stored queries (DOM-free)
+    return compareHighlightQueries(h1, h2)
+  })
+}
+
+
+
+// Alternative approach: compare stored queries directly without accessing DOM
+function compareHighlightQueries(h1, h2) {
+  // If both highlights have anchor nodes, compare their query paths
+  if (h1.anchorNode && h2.anchorNode) {
+    const query1 = h1.anchorNode
+    const query2 = h2.anchorNode
+    
+    // Compare the query paths step by step
+    const maxLength = Math.max(query1.length, query2.length)
+    
+    for (let i = 0; i < maxLength; i++) {
+      const step1 = query1[i]
+      const step2 = query2[i]
+      
+      // If one query is shorter, it's likely higher in the DOM
+      if (!step1 && step2) return -1
+      if (step1 && !step2) return 1
+      if (!step1 && !step2) break
+      
+      // Compare by type first
+      if (step1.type !== step2.type) {
+        // Text nodes come before other elements
+        if (step1.type === 'text' && step2.type !== 'text') return -1
+        if (step1.type !== 'text' && step2.type === 'text') return 1
+        // Otherwise, compare alphabetically
+        return step1.type.localeCompare(step2.type)
+      }
+      
+      // If types are the same, compare by index
+      if (step1.index !== step2.index) {
+        return step1.index - step2.index
+      }
+    }
+    
+    // If query paths are the same, compare by anchor offset
+    if (h1.anchorOffset !== h2.anchorOffset) {
+      return h1.anchorOffset - h2.anchorOffset
+    }
+  }
+  
+  // Fallback to creation date
+  return (h2.vCreated || 0) - (h1.vCreated || 0)
+}
+
+
+
+
+
+// Helper function to get container element from highlight
+function getContainerFromHighlight(highlight) {
+  if (!highlight.container) return null
+  
+  try {
+    // Try to find the container element using the stored query
+    if (highlight.container.length > 0) {
+      const query = highlight.container[0]
+      if (query.id) {
+        return document.getElementById(query.id)
+      }
+    }
+  } catch (e) {
+    console.warn('Could not get container from highlight:', e)
+  }
+  
+  return null
+}
+
+// Helper function to get element's position in document
+function getElementPositionInDocument(element) {
+  if (!element) return 0
+  
+  try {
+    // Get the element's bounding rectangle
+    const rect = element.getBoundingClientRect()
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+    
+    // Return the absolute top position
+    return scrollTop + rect.top
+  } catch (e) {
+    console.warn('Could not get element position:', e)
+    return 0
+  }
+}
 const convertPasteToText = function (evt) {
   evt.preventDefault()
   const text = evt.clipboardData.getData('text/plain')
@@ -1919,6 +2082,49 @@ function isEmpty (obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) return false
   }
   return true
+}
+
+// for pdf's used o update chrome view page and other pages with changes made elsewhere (eg marks added from other pages)
+const isChromeExtensionUrl = function (url) {
+  return (url && url.indexOf('chrome-extension://') === 0)
+}
+const isHiperCardsPdfHighlighter = function (url) {
+  return isChromeExtensionUrl(url) && url.indexOf('pdf_viewer.html') > -1
+}
+const isHiperCardsPdfQueriedFile = function (url, fileUrl) {
+  if (!url || !fileUrl || !isChromeExtensionUrl(url)) return false
+  // Decode both URLs for comparison since file parameter comes URL encoded
+  const decodedPdfFile = pdfFileUrlInhiperCardsQueryOf(url);
+  const decodedFileUrl = decodeURIComponent(fileUrl || '');
+  return decodedPdfFile === decodedFileUrl;
+
+}
+const pdfFileUrlInhiperCardsQueryOf = function (url) {
+  if (!url || !isChromeExtensionUrl(url)) return null
+  const urlParams = new URLSearchParams(url.split('?')[1]);
+  return decodeURIComponent(urlParams.get('file') || '');
+}
+// Detect if Chrome's PDF viewer is active
+function detectChromesPDFViewer() {
+  try {
+    // onsole.log('🔍 detectChromesPDFViewer called');
+    
+    // Check multiple indicators that Chrome's PDF viewer is active
+    const pdfIndicators = {
+      hasEmbedElement: !!document.querySelector('embed[type="application/pdf"]'),
+      hasObjectElement: !!document.querySelector('object[type="application/pdf"]')
+    };
+        
+    // Return true if any PDF indicators are found
+    const isPDF = pdfIndicators.hasEmbedElement || 
+           pdfIndicators.hasObjectElement;
+           
+    return isPDF;
+           
+  } catch (error) {
+    console.error('❌ Could not detect PDF viewer:', error);
+    return false;
+  }
 }
 
 const utilsDummy = false // for eslint exports

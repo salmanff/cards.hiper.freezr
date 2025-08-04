@@ -37,7 +37,7 @@
       "page_title": "hiper.cards - shared page",
       "html_file": "vulog_ppage.html",
       "css_files": ["vulog_ppage.css"],
-      "script_files": [],
+      "script_files": ["vulog_ppage.js"],
       "header_map": {
         "author": { "field_name": "_owner", "text": "User:" },
         "published": { "field_name": "__date_published" },
@@ -56,12 +56,9 @@
   "app_tables": {
     "logs": {
       "field_names": {
-        // hiper.cards defined main fields
         "url": { "type": "string", "description": "Full url fo the site" },
         "purl": { "type": "string", "description": "the url without the query component" },
         "domainApp": { "type": "string", "description": "App name if page meta data defines it, and if not the main domain" },
-
-        // scraped fields
         "author": { "type": "string", "description": "Article author if available" },
         "description": { "type": "string", "description": " " },
         "image": { "type": "string", "description": " " },
@@ -77,8 +74,8 @@
         "parser_err": { "type": "string", "description": " " },
         "temp_unknown_tags": { "type": "string", "description": " " },
         "vuLog_height": { "type": "string", "description": " " },
-        "vSearchWords": { "type": "array", "description": " " }, // old
-        "vSearchString": { "type": "string", "description": " " }, // 
+        "vSearchWords": { "type": "array", "description": "OLD VERSION" },
+        "vSearchString": { "type": "string", "description": " " },
         "vulog_max_scroll": { "type": "string", "description": " " },
         "vulog_msg_type": { "type": "string", "description": " " },
         "vulog_time_incr": { "type": "string", "description": " " },
@@ -151,8 +148,8 @@
     }
   },
 
-  "permissions":
-    [{
+  "permissions": [
+    {
       "name": "public_link",
       "type": "share_records",
       "description": "Share bookmarks with your friends",
@@ -200,7 +197,7 @@
       "type": "write_own",
       "description": "private feeds"
     }
-    ],
+  ],
 
   "standAloneApps": {
     "ios": {
@@ -210,5 +207,4 @@
       "install": "https://chrome.google.com/webstore/detail/vulog-logger-bookmarker-h/peoooghegmfpgpafglhhibeeeeggmfhb"
     }
   }
-
 }

@@ -1,72 +1,93 @@
 
 <div id="{{_id}}" style='font-family: "Lucida Sans Unicode", "Helvetica Neue", "Arial", sans-serif; font-size: 14px; padding:5px;'>
 
-		{{#vComments}}
-		<div style="margin-top: 5px">
-			<div style="text-align: left; color: rgb(104, 3, 104); background-color: lightgray; border: 1px solid grey; padding: 3px; border-radius: 3px; margin-bottom: 5px;">
-				{{text}}
-			</div>
+	{{#vComments}}
+	<div style="margin-top: 5px">
+		<div style="text-align: left; color: rgb(104, 3, 104); background-color: lightgrey; border: 1px solid grey; padding: 3px; border-radius: 3px; margin-bottom: 5px;">
+			{{text}}
 		</div>
-		{{/vComments}}
+	</div>
+	{{/vComments}}
 
-		<div style="padding: 10px 20px">
-			<div>
-				<img width="20px" imgerror="hide"  {{^vulog_favIconUrl}}style="display:none"{{/vulog_favIconUrl}} src="{{vulog_favIconUrl}}"/>
-				<a style="font-weight: bold;" href={{url}} target="_blank">
-					{{#title}}{{title}}{{/title}} {{^title}} {{domain_app}} {{/title}}
-				</a>
-				<span style="font-style: italic; {{^author}}display:none{{/author}}"> &nbsp; By {{author}}</span>
-				<span style="font-style: italic; {{^published}}display:none{{/published}}">({{published}})</span>
-			</div>
-
-
-			<div style="display: grid; grid-template-columns: {{#description}}1fr{{/description}} {{#image}}1fr{{/image}}; padding: 2px;">
-				{{#description}}<div style="max-height: 100px; overflow: hidden; text-overflow: ellipsis; color: darkgrey;">
-					{{description}}
-				</div>{{/description}}
-
-				{{#image}}
-				<div style="max-height: 100px; overflow: hidden; display: flex; align-items: center; border-radius: 20px;">
-					<img src="{{image}}" style="max-width: 100%;">
-				</div>
-				{{/image}}
-			</div>
+	<div style="padding: 10px 20px">
+		<div style="margin-bottom: 10px;">
+			<a style="font-weight: bold; text-decoration: none; color: inherit;" href={{url}} target="_blank">
+				{{#title}}{{title}}{{/title}} {{^title}} {{domain_app}} {{/title}}
+			</a>
 		</div>
 
-		<div style="{{^vHighlights}} display:none; {{/vHighlights}} margin-bottom: 20px; text-align:center;">
-			<div style="font-size: medium; font-weight: bold; color: yellowgreen; text-align: left; margin-top: 10px;">Highlights</div>
-			{{#vHighlights}}
-				<div class="highlightOuter">
-					<div class="quote_outer" style="border-color: yellowgreen;">
-						<div style="display: grid; color: yellowgreen; grid-template-columns: 5px 1fr 5px; margin: 10px;">
-							<div class="quote_left"></div>
-							<div class="quote_inner" style="text-align: left">{{string}}</div>
-							<div class="quote_right"></div>
-						</div>
-						{{#vComments}}
-						<div style="margin-left: 20px; margin-top: 5px">
-							<div style="text-align: left; color: rgb(104, 3, 104); background-color: lightgrey; border: 1px solid grey; padding: 3px; border-radius: 3px; margin-right: 5px;">
-								{{text}}
-							</div>
-							<div style="padding-right: 5px; margin-bottom: 10px; margin-right: 0px; font-size: smaller; color: darkgray;">
-								<div style="float: right;">{{dateText}}</div>
-							</div>
-						</div>
-					{{/vComments}}
+		<div style="margin-bottom: 10px;">
+			{{#vulog_favIconUrl}}
+			<img width="20px" imgerror="hide" style="vertical-align: middle; margin-right: 5px;" src="{{vulog_favIconUrl}}"/>
+			{{/vulog_favIconUrl}}
+			<span style="font-weight: bold; color: #e0e0e0;">{{domain_app}}</span>
+			<span style="font-weight: bold; color: lightgray;">{{domainApp}} - </span>
+			{{#author}}
+			<span style="font-style: italic;">By {{author}}</span>
+			{{/author}}
+			{{#published}}
+			<span style="font-style: italic;">({{published}})</span>
+			{{/published}}
+			<a href="/{{_id}}" style="float: right; color: #0F7A2E; text-decoration: none;">View Hiper Card</a>
+		</div>
+
+		<div style="padding: 2px;">
+			{{#description}}
+			<div style="max-height: 100px; overflow: hidden; text-overflow: ellipsis; color: darkgrey; margin-bottom: 10px;">
+				{{description}}
+			</div>
+			{{/description}}
+
+			{{#image}}
+			<div style="max-height: 100px; overflow: hidden; display: flex; align-items: center; border-radius: 20px;">
+				<img src="{{image}}" style="max-width: 100%; height: auto;">
+			</div>
+			{{/image}}
+		</div>
+	</div>
+
+	{{#vHighlights}}
+	<div style="margin-bottom: 20px; text-align:center;">
+		<div style="font-size: medium; font-weight: bold; color: #0F7A2E; text-align: left; margin-top: 10px; margin-bottom: 10px;">Highlights</div>
+		{{#vHighlights}}
+			<div style="margin-bottom:5px; border-radius: 7px; overflow: hidden; border: 2px solid #0F7A2E;">
+				<div style="display: grid; color: #0F7A2E; grid-template-columns: 5px 1fr 5px; margin: 10px;">
+					<div style="display: inline-block; vertical-align: top; height: 20px;">
+						<span style="padding-right: 3px; font-size: 24px;">"</span>
+					</div>
+					<div style="padding: 5px 0px 0px 5px; text-align: left;">{{string}}</div>
+					<div style="vertical-align: bottom; align-self: end; height: 15px;">
+						<span style="padding-right: 3px; font-size: 24px;">"</span>
 					</div>
 				</div>
-			{{/vHighlights}}
-		</div>
+				{{#vComments}}
+				<div style="margin-left: 20px; margin-top: 5px">
+					<div style="text-align: left; color: rgb(104, 3, 104); background-color: lightgrey; border: 1px solid grey; padding: 3px; border-radius: 3px; margin-right: 5px;">
+						{{text}}
+					</div>
+					<div style="padding-right: 5px; margin-bottom: 10px; margin-right: 0px; font-size: smaller; color: darkgray;">
+						<div style="float: right;">{{dateText}}</div>
+					</div>
+				</div>
+				{{/vComments}}
+			</div>
+		{{/vHighlights}}
+	</div>
+	{{/vHighlights}}
 
 	<div style="display:none">
-			<div style="font-size:12px; font-style: italic; color:#3f51b5;">
-				Posted by {{_data_owner}}
-				<span {{^_date_modified}}style="display:none"{{/_date_modified}}>
-						on {{__date_modified}}
-				</span>
-			</div>
-			<div style="color:grey;{{^keywords}}display:none{{/keywords}}">
-				Key words: {{#keywords}} {{.}}{{/keywords}}
-			</div>
+		<div style="font-size:12px; font-style: italic; color:#3f51b5;">
+			Posted by {{_data_owner}}
+			{{#_date_modified}}
+			<span>
+				on {{__date_modified}}
+			</span>
+			{{/_date_modified}}
+		</div>
+		{{#keywords}}
+		<div style="color:grey;">
+			Key words: {{#keywords}} {{.}}{{/keywords}}
+		</div>
+		{{/keywords}}
 	</div>
 </div>

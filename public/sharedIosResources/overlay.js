@@ -9,6 +9,7 @@
 // showThis can be none (dont show any highlights), ownMark, redirectmark or messageMark
 
 /* global showWarning, chrome, overlayUtils, vulogPageDataFromSwift, pasteAsText, COLOR_MAP, isIos, pureUrlify, VuPageData, highlightFromSelection, alert, showHighlights, HIGHLIGHT_CLASS, freepr, freezr */
+// console.log('overlay.js loaded')
 
 const vState = {
   purl: pureUrlify(window.location.href), // new 220705 - used to be parsedPage.props.purl, and defined below,
@@ -46,7 +47,14 @@ const vState = {
     return retInfo
   }
 }
-vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
+if (isHiperCardsPdfHighlighter(window.location.href)) {
+  vState.pageInfoFromPage = { purl: vState.purl }
+} else {
+  vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)  
+}
+vState.purl = vState.pageInfoFromPage.purl
+console.log('overlay vState', vState)
+
 if (!isIos()) {
   // vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
   if (window.self === window.top) {
@@ -58,15 +66,26 @@ if (!isIos()) {
         if (document.getElementById('vulog_overlay_outer')) document.getElementById('vulog_overlay_outer').style.display = 'none'
       },
       copy_highs: function () {
+        if (!vState.ownMark) vState.ownMark = {}
         if (!vState.ownMark.vHighlights) vState.ownMark.vHighlights = []
         // onsole.log(vState)
-        vState.shown_highlight_details.forEach(ahigh => vState.ownMark.vHighlights.push(ahigh))
-        chrome.runtime.sendMessage({ purl: vState.pageInfoFromPage.purl, highlights: vState.shown_highlight_details, msg: 'copyHighlights' },
+        const showThis = vState.showThis
+        const highlights = showThis === 'redirectmark' ? vState.redirectmark?.vHighlights : (showThis === 'messageMark' ? vState.messageMark?.vHighlights : [])  
+        highlights.forEach(ahigh => vState.ownMark.vHighlights.push(ahigh))
+        chrome.runtime.sendMessage({ purl: vState.purl, highlights, msg: 'copyHighlights' },
           function (resp) {
             if (resp.error) {
-              console.warn('Error sending info to background ', vState.pageInfoFromPage) // new 220705 - used to be parsedPage instead of vState.pageInfoFromPage
+              console.warn('Error sending info to background ', vState.purl) // new 220705 - used to be parsedPage instead of vState.pageInfoFromPage
             } else {
-              window.location.reload()
+              chrome.runtime.sendMessage({ purl: vState.purl, msg: 'showThisFromOverlay', showThis: 'ownMark' },
+                function (resp) {
+                  if (resp.error) {
+                    console.warn('Error changing showThis ', vState.pageInfoFromPage) // new 220705 - used to be parsedPage instead of vState.pageInfoFromPage
+                  } else {
+                    window.location.reload()
+                  }
+                }
+              )
             }
           }
         )
@@ -117,194 +136,257 @@ if (!isIos()) {
     vState.notesBoxTimer = {
       lastKeyDown: null,
     }
-    vState.showVulogOverlay = function (options) {
-      // options fromKeyboard
-      
-      let overlay
-      if (document.getElementById('vulog_overlay_outer')) {
-        overlay = document.getElementById('vulog_overlay_outer')
-        overlay.innerHTML = ''
-      } else {
-        overlay = overlayUtils.makeEl('div', 'vulog_overlay_outer', 'cardOuter', '') // cardOuter included so messageMark can remove previousInterface
-      }
-      overlay.style.display = 'block'
-      // if (errMsg) {
-      //   var errDiv = overlayUtils.makeEl('div', 'vulog_overlay_errMsg', null, errMsg)
-      //   overlay.appendChild(errDiv)
-      // }
-
-      overlay.appendChild(overlayUtils.makeEl('div', null, null, 'hiper.cards'))
-
-      const aspan = overlayUtils.makeEl('span', 'vulog_overlay_cross_ch')
-      aspan.onclick = vState.desktop_overlay.close
-      overlay.appendChild(aspan)
-
-      const stardiv = document.createElement('div')
-      stardiv.style['text-align'] = 'center'
-      stardiv.style.margin = '0'
-      stardiv.appendChild(overlayUtils.drawstars((vState.ownMark || parsedPage.props), { markOnBackEnd: vState.markOnBackEnd }))
-
-      overlay.appendChild(stardiv)
-      const notesBox = overlayUtils.drawMainNotesBox(vState.ownMark, {
-        log: vState.pageInfoFromPage, 
-        defaultHashTag: vState.defaultHashTag,
-        mainNoteSaver: async function (mark) {
-          vState.notesBoxTimer.lastKeyDown = new Date().getTime()
-          const TIMELIMIT = 3000
-          function delay(ms) { // from https://www.pentarem.com/blog/how-to-use-settimeout-with-async-await-in-javascript/
-            return new Promise(resolve => setTimeout(resolve, ms));
-          }
-          await delay(TIMELIMIT)
-          const nowTime = new Date().getTime()
-          // onsole.log('time diff:', (nowTime - vState.notesBoxTimer.lastKeyDown))
-          if (nowTime - vState.notesBoxTimer.lastKeyDown >= TIMELIMIT) {
-            const purl = mark.purl
-            const id = mark?._id // Should be different if it is a log ?
-            const msg = 'saveMainComment'
-            const response = await chrome.runtime.sendMessage({ msg, purl, notes: mark.vNote, props: mark, id })
-            return response 
+    // Helper function to create view switching buttons
+    vState.createViewButton = function (viewKey, title, currentView) {
+      const viewButton = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', title)
+      viewButton.onclick = function () { 
+        chrome.runtime.sendMessage({ msg: 'showThisFromOverlay', showThis: viewKey, purl: vState.purl }, function (response) {
+          if (!response || response.error) {
+            console.warn('handle error ', response)
           } else {
-            return { success: true, note: 'not saving yet - waiting to stop typing'}
+            window.location.reload()
+          }
+        })
+      }
+      return viewButton
+    }
+
+    vState.showVulogOverlay = function (options) {
+      // onsole.log('overlay.js showVulogOverlay')
+      // options fromKeyboard
+
+      updateStatefromBackground(function () {
+        let overlay
+        if (document.getElementById('vulog_overlay_outer')) {
+          overlay = document.getElementById('vulog_overlay_outer')
+          overlay.innerHTML = ''
+        } else {
+          overlay = overlayUtils.makeEl('div', 'vulog_overlay_outer', 'cardOuter', '') // cardOuter included so messageMark can remove previousInterface
+        }
+        overlay.style.display = 'block'
+
+        overlay.appendChild(overlayUtils.makeEl('div', null, { 'margin-top': '-16px' }, 'hiper.cards'))
+
+        const aspan = overlayUtils.makeEl('span', 'vulog_overlay_cross_ch')
+        aspan.onclick = vState.desktop_overlay.close
+        overlay.appendChild(aspan)
+
+        const stardiv = document.createElement('div')
+        stardiv.style['text-align'] = 'center'
+        stardiv.style.margin = '0'
+        stardiv.appendChild(overlayUtils.drawstars((vState.ownMark || parsedPage.props || { purl: vState.purl }), { markOnBackEnd: vState.markOnBackEnd }))
+
+        overlay.appendChild(stardiv)
+        const notesBox = overlayUtils.drawMainNotesBox(vState.ownMark, {
+          log: vState.pageInfoFromPage, 
+          defaultHashTag: vState.defaultHashTag,
+          mainNoteSaver: async function (mark) {
+            vState.notesBoxTimer.lastKeyDown = new Date().getTime()
+            const TIMELIMIT = 3000
+            function delay(ms) { // from https://www.pentarem.com/blog/how-to-use-settimeout-with-async-await-in-javascript/
+              return new Promise(resolve => setTimeout(resolve, ms));
+            }
+            await delay(TIMELIMIT)
+            const nowTime = new Date().getTime()
+            // onsole.log('time diff:', (nowTime - vState.notesBoxTimer.lastKeyDown))
+            if (nowTime - vState.notesBoxTimer.lastKeyDown >= TIMELIMIT) {
+              const purl = mark.purl
+              const id = mark?._id // Should be different if it is a log ?
+              const msg = 'saveMainComment'
+              const response = await chrome.runtime.sendMessage({ msg, purl, notes: mark.vNote, props: mark, id })
+              return response 
+            } else {
+              return { success: true, note: 'not saving yet - waiting to stop typing'}
+            }
+          }
+        })
+        overlay.appendChild(notesBox)
+        if (options?.fromKeyboard) setTimeout(() => { notesBox.focus() }, 10)
+
+        // Define the available data sources and their configurations
+        // This configuration-driven approach makes it easy to add new data sources
+        // and ensures consistent behavior across different view types
+        const dataSources = {
+          ownMark: {
+            title: 'Your highlights!!!',   
+            hasHighlights: () => vState.ownMark?.vHighlights && vState.ownMark.vHighlights.length > 0,
+            hasComments: () => vState.ownMark?.vComments && vState.ownMark.vComments.length > 0,
+            hasData: function() { return this.hasHighlights() || this.hasComments(); },
+            getData: () => vState.ownMark?.vHighlights,
+            getMark: () => vState.ownMark,
+            showEditingTools: true, // Show palette and power mode
+            showCopyButton: false, // Don't show copy button for own marks
+            showComments: false // Don't show comments section for own marks
+          },
+          redirectmark: {
+            title: 'Shared Highlights',
+            hasHighlights : () => vState.redirectmark?.vHighlights && vState.redirectmark.vHighlights.length > 0,
+            hasComments: () => vState.redirectmark?.vComments && vState.redirectmark.vComments.length > 0,
+            hasData: function() { return this.hasHighlights() || this.hasComments(); },
+            getData: () => vState.redirectmark?.vHighlights,
+            getMark: () => vState.redirectmark,
+            showEditingTools: false,
+            showCopyButton: true,
+            showComments: true,
+            commentTitle: 'Shared Link',
+            commentColor: 'blue'
+          },
+          messageMark: {
+            title: 'Highlights in Messages',
+            hasHighlights: () => vState.messageMark?.vHighlights && vState.messageMark.vHighlights.length > 0,
+            hasComments: () => vState.messageMark?.vComments && vState.messageMark.vComments.length > 0,
+            hasData: function() { return this.hasHighlights() || this.hasComments(); },
+            getData: () => vState.messageMark?.vHighlights,
+            getMark: () => vState.messageMark,
+            showEditingTools: false,
+            showCopyButton: true,
+            showComments: false // true,
+            // commentTitle: 'Messages',
+            // commentColor: 'purple'
           }
         }
-      })
-      overlay.appendChild(notesBox)
-      if (options?.fromKeyboard) setTimeout(() => { notesBox.focus() }, 10)
 
-      if (vState.showThis === 'ownMark') {
-        // Add pallette
-        const palletteOuter = overlayUtils.makeEl('div')
-        palletteOuter.style['padding-top'] = '10px'
-        palletteOuter.style.margin = '0'
-        palletteOuter.appendChild(overlayUtils.areaTitle('hlightPaellette', { color: 'yellowgreen', title: 'Highlight Pallette' }))
-        const palletteArea = overlayUtils.makeEl('div', 'vulog_overlay_palletteArea', { display: 'inline-block', margin: 0, 'padding-left': '27px' }, '')
-        palletteArea.appendChild(overlayUtils.drawColorTable(vState.currentHColor))
-        palletteOuter.appendChild(palletteArea)
-        overlay.appendChild(palletteOuter)
-        setTimeout(vState.addPalleteeArea, 5)
+        // Get current data source configuration
+        const currentSource = dataSources[vState.showThis]
+        
+        // Show editing tools only for ownMark (not for 'none' case)
+        if (currentSource?.showEditingTools && vState.showThis !== 'none') {
+          // Add palette
+          const palletteOuter = overlayUtils.makeEl('div')
+          palletteOuter.style['padding-top'] = '10px'
+          palletteOuter.style.margin = '0'
+          palletteOuter.appendChild(overlayUtils.areaTitle('hlightPaellette', { color: THEME_COLORS.primary, title: 'Highlight Pallette' }))
+          const palletteArea = overlayUtils.makeEl('div', 'vulog_overlay_palletteArea', { display: 'inline-block', margin: 0, 'padding-left': '27px' }, '')
+          palletteArea.appendChild(overlayUtils.drawColorTable(vState.currentHColor))
+          palletteOuter.appendChild(palletteArea)
+          overlay.appendChild(palletteOuter)
+          setTimeout(vState.addPalleteeArea, 5)
 
-        // Add edit_mode
-        const editOuter = overlayUtils.areaTitle('Power mode', { color: 'yellowgreen'})
-        editOuter.style['padding-top'] = '10px'
-        overlay.appendChild(editOuter)
-        const editModeArea = overlayUtils.makeEl('div', 'vulog_overlay_editModeArea', { 'margin-top': '-5px', 'font-size': '18px' }, null)
-        overlay.appendChild(editModeArea)
-        setTimeout(vState.addEditModeButton, 5)
-      }
-
-      const hasSelfHighlights = (vState.ownMark?.vHighlights && vState.ownMark.vHighlights.length > 0)
-      const hasRedirectHighlights = (vState.redirectmark?.vHighlights && vState.redirectmark.vHighlights.length > 0)
-      const hasMessageHighlights = (vState.messageMark?.vHighlights && vState.messageMark.vHighlights.length > 0)
-      let hasHighlights = false
-      let theHighlights
-      let highlightTitle = null
-      let logToConvert = null
-      let markOnMarks
-
-      if (vState.showThis === 'ownMark') {
-        highlightTitle = 'Your highlights!!!'
-        hasHighlights = hasSelfHighlights
-        theHighlights = vState.ownMark?.vHighlights
-        markOnMarks = vState.ownMark
-      } else if (vState.showThis === 'none') {
-        highlightTitle = 'Highhlights hidden'
-        hasHighlights = false
-      } else if (vState.showThis === 'redirectmark') {
-        highlightTitle = hasRedirectHighlights ? 'Shared Highlights' : ''
-        hasHighlights = hasRedirectHighlights
-        theHighlights = vState.redirectmark?.vHighlights
-        logToConvert = vState.redirectmark
-        if (logToConvert && logToConvert.vComments && logToConvert.vComments.length > 0) {
-          overlay.appendChild(overlayUtils.areaTitle("Shared Link", { color: 'purple'}))
-          logToConvert.vComments.forEach(comment => { // currently should only be one
-            comment.sender_host = logToConvert.host
-            comment.sender_id = logToConvert._data_owner
-            const commDiv = overlayUtils.oneComment(logToConvert.purl, comment, { isReceived: true, noReply: true })
-            overlay.appendChild(commDiv)
-          });
+          const editOuter = overlayUtils.areaTitle('Power mode', { color: THEME_COLORS.primary})
+          editOuter.style['padding-top'] = '10px'
+          overlay.appendChild(editOuter)
+          const editModeArea = overlayUtils.makeEl('div', 'vulog_overlay_editModeArea', { 'margin-top': '-5px', 'font-size': '18px' }, null)
+          overlay.appendChild(editModeArea)
+          setTimeout(vState.addEditModeButton, 5)
         }
-      } else if (vState.showThis === 'messageMark') {
-        highlightTitle = 'Highlights in Messages'
-        hasHighlights = hasMessageHighlights
-        theHighlights = vState.messageMark?.vHighlights
-        logToConvert = vState.messageMark
-      }
 
-      if (hasHighlights) {
-        const hlightsDiv = overlayUtils.makeEl('div', null, null)
-        hlightsDiv.appendChild(overlayUtils.areaTitle(highlightTitle, { color: 'yellowgreen'}))
-        theHighlights.forEach(hlight => {
-          const isOwn = (vState.showThis === 'ownMark') // || (vState.ownMark?.vHighlights && vState.ownMark?.vHighlights.find(m => m.id === hlight.id)))
-          const showErr = vState.displayErrs && vState.displayErrs.find(m => m.id === hlight.id)
-          const hlightDiv = overlayUtils.drawHighlight(vState.purl, hlight,
-            { isOwn, showErr, showTwoLines: !showErr, logToConvert, markOnMarks, markOnBackEnd: vState.markOnBackEnd, overLayClick: showErr ? null : function() { vState.scrollToHighLight(hlight.id) } }
-          )
-          hlightsDiv.appendChild(hlightDiv)
+        // Show highlights and comments if present (not for 'none' case)
+        if (vState.showThis !== 'none' && currentSource?.hasData()) {
+          // Show comments if configured and available
+          if (currentSource?.showComments && currentSource.hasComments()) {
+            const mark = currentSource.getMark()
+            overlay.appendChild(overlayUtils.areaTitle(currentSource.commentTitle, { color: currentSource.commentColor }))
+            mark.vComments.forEach(comment => {
+              comment.sender_host = mark.host
+              comment.sender_id = mark._data_owner
+              const commDiv = overlayUtils.oneComment(mark.purl, comment, { isReceived: true, noreply: true })
+              overlay.appendChild(commDiv)
+            })
+          }
+          // Show highlights if available
+          if (currentSource.hasHighlights()) {
+            const hlightsDiv = overlayUtils.makeEl('div', 'overlayHighlightsArea', null)
+            hlightsDiv.appendChild(overlayUtils.areaTitle(currentSource.title, { color: THEME_COLORS.primary}))
+            const highlights = currentSource.getData()
+            
+            // Sort highlights by position (top to bottom)
+            const sortedHighlights = sortHighlightsByPosition(highlights)
+            
+            const markOnMarks = currentSource.getMark()
+            sortedHighlights.forEach(hlight => {
+              const isOwn = (vState.showThis === 'ownMark')
+              const showErr = vState.displayErrs && vState.displayErrs.find(m => m.id === hlight.id)
+              const hlightDiv = overlayUtils.drawHighlight(vState.purl, hlight,
+                { isOwn, showErr, showTwoLines: !showErr, logToConvert: markOnMarks, markOnMarks, markOnBackEnd: vState.markOnBackEnd, overLayClick: showErr ? null : function() { vState.scrollToHighLight(hlight.id) } }
+              )
+              hlightsDiv.appendChild(hlightDiv)
+            })
+            overlay.appendChild(hlightsDiv)
+          }
+          // Add copy highlights button if configured (not for 'none' case)
+          if (currentSource?.showCopyButton && currentSource.hasHighlights()) {
+            const addhighs = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Copy Highlights')
+            addhighs.onclick = function () {
+              vState.desktop_overlay.copy_highs()
+            }
+            overlay.appendChild(document.createElement('br'))
+            overlay.appendChild(addhighs)
+          }
+        }
+
+
+
+        // Create view switching section
+        const theselect = overlayUtils.areaTitle('hlightPaellette', { color: THEME_COLORS.primary, title: 'Switch Views' })
+        
+        // Generate available view buttons based on what data exists
+        const availableViews = []
+        
+        // Check what data sources are available
+        Object.entries(dataSources).forEach(([key, config]) => {
+          if (config.hasHighlights()) {
+            availableViews.push({
+              key,
+              title: key === 'ownMark' ? 'Show Own Highlights' : 
+                    key === 'redirectmark' ? 'Show Shared Highlights' : 
+                    key === 'messageMark' ? 'Show Message Highlights' : key,
+              config
+            })
+          }
         })
-        overlay.appendChild(hlightsDiv)
-      }
 
-      const theselect = overlayUtils.areaTitle('hlightPaellette', { color: 'yellowgreen', title: 'Switch Views' })
-      // add buttons
-      if (vState.showThis === 'ownMark') {
-        if (hasSelfHighlights) {
-          const hideHighs = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Hide Highlights')
+        // Add buttons for available views (excluding current view)
+        availableViews.forEach(view => {
+          if (view.key !== vState.showThis) {
+            theselect.appendChild(vState.createViewButton(view.key, view.title, vState.showThis))
+          }
+        })
+
+        // Add hide highlights button for ownMark (or any view with highlights)
+        if (currentSource?.hasHighlights()) {
+          const hideHighs = overlayUtils.makeEl('div', 'hideHighlightsButt', 'vulog_overlay_butt', 'Hide Highlights')
           hideHighs.onclick = function () {
-            chrome.runtime.sendMessage({ msg: 'showThisFromOverlay', showThis: 'none', purl: vState.pageInfoFromPage.purl }, function (response) {
+            chrome.runtime.sendMessage({ msg: 'showThisFromOverlay', showThis: 'none', purl: vState.purl }, function (response) {
               if (!response || response.error) {
                 console.warn('handle error ', response)
               } else {
-                // onsole.log(response)// reload
                 window.location.reload()
               }
             })
           }
           theselect.appendChild(hideHighs)
         }
-        if (hasMessageHighlights) {
-          const showMsgHighs = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Show Messages Highlights')
-          showMsgHighs.onclick = function () { 
-            chrome.runtime.sendMessage({ msg: 'showThisFromOverlay', showThis: 'messageMark', purl: vState.pageInfoFromPage.purl }, function (response) {
-              if (!response || response.error) {
-                console.warn('handle error ', response)
-              } else {
-                // onsole.log(response)// reload
-                window.location.reload()
-              }
-            })
-          }
-          theselect.appendChild(showMsgHighs)
-        }
-      } else if (vState.showThis === 'none') {
-        const refresh = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Refresh to show Highlights')
+
+        // Add refresh button
+        const refresh = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Refresh')
         refresh.onclick = function () { window.location.reload() }
         theselect.appendChild(refresh)
-      } else { // messageMark or redriectmark
-        const showSelf = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Refresh')
-        showSelf.onclick = function () { window.location.reload() }
-        theselect.appendChild(showSelf)
 
-        const addhighs = overlayUtils.makeEl('div', null, 'vulog_overlay_butt', 'Copy Highlights')
-        addhighs.onclick = function () {
-          vState.desktop_overlay.copy_highs()
+        // Only show the view switching section if there are multiple views available or actions to take
+        if (availableViews.length > 1 || currentSource?.showCopyButton || vState.showThis === 'ownMark' || vState.showThis === 'none' || vState.showThis === '"notInitialised"') {
+          overlay.appendChild(theselect)
         }
-        theselect.appendChild(document.createElement('br'))
-        if (vState.showThis === 'redirectmark' && hasRedirectHighlights) {
-          theselect.appendChild(addhighs)
-        } else if (vState.showThis === 'messageMark' && hasMessageHighlights) {
-          theselect.appendChild(addhighs)
-        } 
-      }
-      if (hasMessageHighlights || hasSelfHighlights) overlay.appendChild(theselect)
 
-      if (vState.messageMark) {
-        const messageVcomments = overlayUtils.vMessageCommentDetails(vState.pageInfoFromPage.purl, vState.messageMark.vComments)
-        messageVcomments.style.display = 'block'
-        overlay.appendChild(messageVcomments)
-      }
-      document.body.appendChild(overlay)
-      
-      vState.desktop_overlay.is_open = true
+        // Show message comments if available (for any view)
+        if (vState.messageMark?.vComments) {
+          const messageVcomments = overlayUtils.vMessageCommentDetails(vState.pageInfoFromPage.purl, vState.messageMark.vComments)
+          messageVcomments.style.display = 'block'
+          overlay.appendChild(messageVcomments)
+        }
+
+        if (options?.style) {
+          for (const [key, value] of Object.entries(options.style)) {
+            overlay.style[key] = value
+          }
+        }
+
+        document.body.appendChild(overlay)
+        setTimeout(() => {
+          overlayUtils.forceOpacityOnChildren(overlay)
+        }, 100)
+        
+        vState.desktop_overlay.is_open = true
+      })
     }
 
     // fix this
@@ -343,7 +425,7 @@ if (!isIos()) {
       vState.edit_mode = !vState.edit_mode
       vState.addEditModeButton()
       vState.setCursorColor()
-      chrome.runtime.sendMessage({ msg: 'set_edit_mode', set: (vState.edit_mode), purl: vState.pageInfoFromPage.purl }, function (response) {
+      chrome.runtime.sendMessage({ msg: 'set_edit_mode', set: (vState.edit_mode), purl: vState.purl }, function (response) {
         // onsole.log(response)
       })
     }
@@ -453,10 +535,10 @@ if (!isIos()) {
               }
 
               if (response.mark) {
-                const existingMark  = overlayUtils.makeEl('div', null, 'vulog_overlay_titles')
+                const existingMark  = overlayUtils.makeEl('div', null, null)
                 existingMark.style.padding = '5px'
                 existingMark.style.width = '100%'
-                existingMark.style.color = 'yellowgreen'
+                existingMark.style.color = THEME_COLORS.primary
                 existingMark.style['text-align'] = 'left'
                 existingMark.innerHTML = 'Existing bookmark.' 
                 if (response.mark.vHighlights && response.mark.vHighlights.length > 0) {
@@ -505,6 +587,8 @@ if (!isIos()) {
                 if (evt.key === 'Escape') confirmDiv.remove()
               })
             })
+
+            if (response.hColor) vState.currentHColor = response.hColor
             // setTimeout(function () { if (confirmDiv) confirmDiv.remove() }, 5000)
           }
         }
@@ -514,7 +598,7 @@ if (!isIos()) {
     chrome.runtime.onMessage.addListener( // messageMark from background
       function (request, sender, sendResponse) {
         if (request.msg === 'markUpdated') {
-          if (request.updatedMark?.purl === vState.pageInfoFromPage.purl) {
+          if (request.updatedMark?.purl === vState.purl) {
             vState.ownMark = request.updatedMark
             // todo - edge case: highlights could ahve changed too, so need to check if they have changed
             // also need to update for new messages
@@ -523,31 +607,10 @@ if (!isIos()) {
             console.warn('markUpdated sent to page but purl is different??? snbh')
           }
         } else if (request.msg === 'reloadPage') {
-          // console.log('WILL RELOIAD PAGE GIVEN RELOAD REQUEST') // currently not working ??
+          // console.log('WILL RELOAD PAGE GIVEN RELOAD REQUEST') // currently not used ??
           window.location.reload()
           sendResponse({ success: true })
         }
-        // 2023 - 06 -> not used?
-        // if (request.action === 'highlight_selection') {
-        //   highlightSelection()
-        //   sendResponse({ done: 'highlighted text' })
-        // } else if (request.action === 'toggle_edit_mode') {
-        //   vState.toggleEditMode()
-        //   sendResponse()
-        // } else if (request.action === 'set_hcolor') {
-        //   vState.currentHColor = request.color
-        //   vState.setCursorColor()
-        //   vState.addPalleteeArea()
-        //   sendResponse()
-
-        // 2023 - 06 -> not working
-        // } else if (request.action === 'getUrlInfo') {
-        //  onsole.log('got request for info from backgrouns - send ing ', vState.pageInfoFromPage )
-        //   sendResponse({ pageInfoFromPage: vState.pageInfoFromPage })
-        
-        // } else {
-        //   console.warn('unknown request from vulog background ', sender.tab, { request })
-        // }
       }
     )
 
@@ -641,6 +704,25 @@ if (!isIos()) {
     }
     if (document.getElementById('vulog_show_if_extension_is_installed')) {
       document.getElementById('vulog_show_if_extension_is_installed').style.display = 'block'
+      let theLink = null
+      const nextSiblingA = document.getElementById('vulog_show_if_extension_is_installed').nextElementSibling?.nextElementSibling?.nextElementSibling?.querySelector('a')
+      if (nextSiblingA) theLink = nextSiblingA.href
+      const purl = pureUrlify(theLink)
+      if (theLink) {
+        document.getElementById('vulog_show_if_extension_is_installed').firstElementChild.removeAttribute('href');
+        document.getElementById('vulog_show_if_extension_is_installed').style.cursor = 'pointer'
+        document.getElementById('vulog_show_if_extension_is_installed').firstElementChild.style.color = 'blue'
+        document.getElementById('vulog_show_if_extension_is_installed').firstElementChild.onclick = function (e) {
+          e.preventDefault();
+          chrome.runtime.sendMessage({ purl: theLink, msg: 'showThisFromOverlay', showThis: 'redirectmark' }, function (resp) {
+            if (resp.error) {
+              console.warn('Error changing showThis ', vState)
+            } else {
+              window.location.href = theLink
+            }
+          })
+        }
+      }
       if (document.getElementById('vulog_show_if_NOT_installed')) document.getElementById('vulog_show_if_NOT_installed').style.display = 'none'
       // should check if there are highlughts.. if so enable a redirect - perhaps use attributes?
     }
@@ -670,9 +752,7 @@ if (!isIos()) {
         vState.hideHighlighterDivs()
       } else {
         const hlightId = e.target.id.split('_')[3]
-        // console.log('will change color for hlightId ', hlightId)
         chrome.runtime.sendMessage({ msg: 'changeHlightColor', hColor, hlightId, url: window.location.href }, function (response) {
-          // onsole.log('changeHlightColor sent to background - ', { response, hlightId })
           const hLightDiv = document.getElementById('vulog_hlight_' + hlightId)
           if (hLightDiv) hLightDiv.style.backgroundColor = COLOR_MAP[hColor]
           if (!hLightDiv) console.warn('couldnt find vulog_hlight_' + hlightId)
@@ -801,7 +881,8 @@ if (!isIos()) {
         )
       }, 5000)
       setTimeout(function () { 
-        vState.showThis = 'ownMark'
+        // if (!vState.showThis) vState.showThis = 'ownMark' // 202507 nt sure why this was here
+        if (!vState.showThis) console.warn('no showThis', { vState })
         showHighlights() 
       }, 500)
     }
@@ -818,72 +899,149 @@ if (!isIos()) {
   // console.warn('non main page on ios -  message ')
 }
 
+function updateStatefromBackground(callback) {
+  chrome.runtime.sendMessage({ purl: vState.purl, msg: 'getMarkFromVulog' }, function (response) {
+    if (!response || response.error) {
+      console.warn(response || 'No response from vulog extension - internal error?')
+    } else {
+      freezrMeta = response.freezrMeta
+      if (response.hColor) vState.currentHColor = response.hColor  
+      if (response.mark) vState.ownMark = response.mark
+      if (response.redirectmark) vState.redirectmark = response.redirectmark
+      if (response.defaultHashTag) vState.defaultHashTag = response.defaultHashTag
+      if (response.messages && response.messages.length > 0) {
+        let itemJson = null
+        response.messages.forEach(item => {
+          if (!item.record) {
+            console.warn('no recrod to merge for ', item)
+          } else if (!itemJson) {
+            itemJson = convertDownloadedMessageToRecord(item)
+          } else {
+            itemJson = mergeMessageRecords(itemJson, item)
+          }
+        })
+        vState.messageMark = itemJson
+      } else {
+        vState.messageMark = null
+      }
+
+      vState.showThis = response.showThisInoverlay?.show || 'ownMark'
+    }
+    if (callback) callback()
+  })
+}
 // Change Highlight Box and functions
 vState.drawHighlightChangeOptionsBox = function (e) {
   // onsole.log('drawHighlightChangeOptionsBox', { show: vState.showThis })
-  if (vState.showThis === 'ownMark') {
-    const hlightId = e.target.id.split('_')[2]
-    const currentHColor = overlayUtils.mainColorOf(e.target.style.backgroundColor)
-    const thehighLight = vState.getHLightFrom(hlightId)
+  // const hlightId = e.target.id.split('_')[2]
+  const hlightId = e.target.id.split('_').slice(2).join('_')
+  const currentHColor = overlayUtils.mainColorOf(e.target.style.backgroundColor)
+  const thehighLight = vState.getHLightFrom(hlightId)
 
-    let changeHighlightBox
-    if (document.getElementById('vulogIos_changeHighlight_outer')) { // box had been shown previously
-      changeHighlightBox = document.getElementById('vulogIos_changeHighlight_outer')
-      changeHighlightBox.innerHTML = ''
-    } else { // new box
-      changeHighlightBox = overlayUtils.makeEl('div', 'vulogIos_changeHighlight_outer', null, '')
+  // Check if this highlight exists in the user's own marks - moved to top
+  const highlightExistsInOwnMarks = vState.ownMark && vState.ownMark.vHighlights && 
+    vState.ownMark.vHighlights.some(h => h.id === hlightId)
+  // const hasHighlightInOwnMark = vState.showThis === 'ownMark' || highlightExistsInOwnMarks
+
+  let changeHighlightBox
+  if (document.getElementById('vulogIos_changeHighlight_outer')) { // box had been shown previously
+    changeHighlightBox = document.getElementById('vulogIos_changeHighlight_outer')
+    changeHighlightBox.innerHTML = ''
+  } else { // new box
+    changeHighlightBox = overlayUtils.makeEl('div', 'vulogIos_changeHighlight_outer', null, '')
+  }
+  changeHighlightBox.style.display = 'block'
+
+  // onsole.log('window.scrollY' + window.scrollY + '   e.touches: ', e.touches, '   e.event.targetTouches ', e.targetTouches)
+  changeHighlightBox.style.top = (window.scrollY + (e.clientY || ((e.touches && e.touches[0]) ? e.touches[0].clientY : null) || 0)) + 'px'
+  const OUTERBOX_SIZE = 200
+  changeHighlightBox.style.left = (window.scrollX + window.innerWidth - e.clientX < OUTERBOX_SIZE
+    ? Math.max(0, Math.round(window.scrollX + window.innerWidth - OUTERBOX_SIZE))
+    : Math.max(0, Math.round(window.scrollX + e.clientX - OUTERBOX_SIZE / 2))) + 'px'
+
+  if (thehighLight) {
+    if (thehighLight.sender_id && !isOwnHighlight(thehighLight)) {
+      const creatorDiv = overlayUtils.makeEl('div', null, { 'margin-top': '-20px', 'margin-bottom': '15px' })
+      creatorDiv.appendChild(overlayUtils.personOneLiner([{ recipient_id: thehighLight.sender_id, recipient_host: thehighLight.sender_host }], true))
+      // creatorDiv.style.marginTop = '-20px'
+      changeHighlightBox.appendChild(creatorDiv)
     }
-    changeHighlightBox.style.display = 'block'
+    if (vState.showThis !== 'ownMark') {
 
-    // onsole.log('window.scrollY' + window.scrollY + '   e.touches: ', e.touches, '   e.event.targetTouches ', e.targetTouches)
-    changeHighlightBox.style.top = (window.scrollY + (e.clientY || ((e.touches && e.touches[0]) ? e.touches[0].clientY : null) || 0)) + 'px'
-    const OUTERBOX_SIZE = 200
-    changeHighlightBox.style.left = (window.scrollX + window.innerWidth - e.clientX < OUTERBOX_SIZE
-      ? Math.max(0, Math.round(window.scrollX + window.innerWidth - OUTERBOX_SIZE))
-      : Math.max(0, Math.round(window.scrollX + e.clientX - OUTERBOX_SIZE / 2))) + 'px'
+    }
 
-    if (thehighLight) {
-      if (thehighLight.vComments && thehighLight.vComments.length > 0) {
-        changeHighlightBox.appendChild(overlayUtils.drawCommentsSection(vState.pageInfoFromPage.purl, thehighLight))
+    if (thehighLight.vComments && thehighLight.vComments.length > 0) {
+      changeHighlightBox.appendChild(overlayUtils.drawCommentsSection(vState.pageInfoFromPage.purl, thehighLight))
+    }
+
+    // this hsould go into drawHlightCommentsBox
+    // .. then dp vState.hideHighlighterDivs()
+    const notesDiv = overlayUtils.makeEl('div', 'vulog_hlight_notes', 'vulog_overlay_input')
+    notesDiv.setAttribute('contenteditable', 'true')
+    notesDiv.setAttribute('placeholder', 'Add a comment')
+    notesDiv.onpaste = function (evt) {
+      pasteAsText(evt)
+    }
+    notesDiv.onkeydown = function (evt) {
+      if (evt.key === 'Enter'){ 
+        saveHlightComment()
+      } else {
+        document.getElementById('vulog_hlight_saveNote').className = 'vulog_dialogue_butts bluecol'
       }
+    }
+    if (thehighLight.vNote && thehighLight.vNote !== '') notesDiv.innerText = thehighLight.vNote
+    changeHighlightBox.appendChild(notesDiv)
 
-      // this hsould go into drawHlightCommentsBox
-      // .. then dp vState.hideHighlighterDivs()
-      const notesDiv = overlayUtils.makeEl('div', 'vulog_hlight_notes', 'vulog_overlay_input')
-      notesDiv.setAttribute('contenteditable', 'true')
-      notesDiv.setAttribute('placeholder', 'Add a comment')
-      notesDiv.onpaste = function (evt) {
-        pasteAsText(evt)
-      }
-      notesDiv.onkeydown = function (evt) {
-        if (evt.key === 'Enter'){ 
-          saveHlightComment()
-        } else {
-          document.getElementById('vulog_hlight_saveNote').className = 'vulog_dialogue_butts bluecol'
+    const saveDiv = overlayUtils.makeEl('div', 'vulog_hlight_saveNote', 'vulog_dialogue_butts')
+    saveDiv.innerText = 'Save Comment'
+    const saveHlightComment = async function () {
+      const vCreated = new Date().getTime()
+      const text = notesDiv.innerText.trim()
+      if (text != '') {
+        // If highlight doesn't exist in own marks, add it first
+        if (!highlightExistsInOwnMarks) {
+          if (!vState.ownMark) vState.ownMark = {}
+          if (!vState.ownMark.vHighlights) vState.ownMark.vHighlights = []
+          
+          // Create a copy of the highlight to add to own marks
+          const highlightCopy = JSON.parse(JSON.stringify(thehighLight))
+          vState.ownMark.vHighlights.push(highlightCopy)
+          
+          // Send to background to save and wait for response
+          try {
+            const resp = await new Promise((resolve, reject) => {
+              chrome.runtime.sendMessage({ 
+                purl: vState.purl, 
+                highlights: [highlightCopy], 
+                msg: 'copyHighlights' 
+              }, function (response) {
+                if (response && response.error) {
+                  reject(response.error)
+                } else {
+                  resolve(response)
+                }
+              })
+            })
+          } catch (error) {
+            console.warn('Error copying highlight to own marks ', vState.purl, error)
+            // Continue with comment saving even if copying failed
+          }
         }
-      }
-      if (thehighLight.vNote && thehighLight.vNote !== '') notesDiv.innerText = thehighLight.vNote
-      changeHighlightBox.appendChild(notesDiv)
 
-      const saveDiv = overlayUtils.makeEl('div', 'vulog_hlight_saveNote', 'vulog_dialogue_butts')
-      saveDiv.innerText = 'Save Comment'
-      const saveHlightComment = function () {
-        const vCreated = new Date().getTime()
-        const text = notesDiv.innerText.trim()
-        if (text != '') {
-          const theComment = { text, vCreated }
-          if (!thehighLight.vComments) thehighLight.vComments = []
-          thehighLight.vComments.push(theComment)
-          if (document.getElementById('vulog_hlight_' + thehighLight.id)) document.getElementById('vulog_hlight_' + thehighLight.id).className = HIGHLIGHT_CLASS + ' hlightComment'
-          if (!document.getElementById('vulog_hlight_' + thehighLight.id)) console.warn('could not get element with id ', document.getElementById(thehighLight.id))
-          chrome.runtime.sendMessage({ msg: 'addHLightComment', hlightId, text, vCreated, url: window.location.href }, function (response) {
-            vState.hideHighlighterDivs()
-          })
-        }
+        const theComment = { text, vCreated }
+        if (!thehighLight.vComments) thehighLight.vComments = []
+        thehighLight.vComments.push(theComment)
+        if (document.getElementById('vulog_hlight_' + thehighLight.id)) document.getElementById('vulog_hlight_' + thehighLight.id).className = HIGHLIGHT_CLASS + ' hlightComment'
+        if (!document.getElementById('vulog_hlight_' + thehighLight.id)) console.warn('could not get element with id ', document.getElementById(thehighLight.id))
+        chrome.runtime.sendMessage({ msg: 'addHLightComment', hlightId, text, vCreated, url: window.location.href }, function (response) {
+          vState.hideHighlighterDivs()
+        })
       }
-      saveDiv.onclick = saveHlightComment 
-      changeHighlightBox.appendChild(saveDiv)
+    }
+    saveDiv.onclick = saveHlightComment 
+    changeHighlightBox.appendChild(saveDiv)
 
+    if (highlightExistsInOwnMarks) {
       const colorChanger = overlayUtils.makeEl('div', 'vulogIos_pallette_area_for_change', '')
 
       colorChanger.appendChild(vState.highlightChangeOptionsBoxColorTable(currentHColor, hlightId, false))
@@ -907,14 +1065,44 @@ vState.drawHighlightChangeOptionsBox = function (e) {
       }
       changeHighlightBox.appendChild(removeButt)
     } else {
-      const errorText = overlayUtils.makeEl('div', '', 'redcol')
-      errorText.innerText = 'Error: Could not retrieve highlight. sorry!'
+      // Show bookmark button instead of remove button
+      const bookmarkButt = overlayUtils.makeEl('div', 'vulog_hlightbookmark_' + hlightId, 'vulog_dialogue_butts bluecol')
+      bookmarkButt.innerText = 'Bookmark Highlight'
+      bookmarkButt.onclick = function () {
+        // Copy this highlight to own marks
+        if (!vState.ownMark) vState.ownMark = {}
+        if (!vState.ownMark.vHighlights) vState.ownMark.vHighlights = []
+        
+        // Create a copy of the highlight to add to own marks
+        const highlightCopy = JSON.parse(JSON.stringify(thehighLight))
+        vState.ownMark.vHighlights.push(highlightCopy)
+        
+        chrome.runtime.sendMessage({ 
+          purl: vState.purl, 
+          url: vState.purl,
+          highlights: [highlightCopy], 
+          msg: 'copyHighlights' 
+        }, function (resp) {
+          if (resp.error) {
+            console.warn('Error copying highlight to own marks ', vState.purl)
+          } else {
+            // Redraw the options box instead of reloading the page
+            vState.drawHighlightChangeOptionsBox(e)
+          }
+        })
+      }
+      changeHighlightBox.appendChild(bookmarkButt)
     }
-
-    document.body.appendChild(changeHighlightBox)
   } else {
-    console.warn('todo - handle highlights from others.')
+    const errorText = overlayUtils.makeEl('div', '', 'redcol')
+    errorText.innerText = 'Error: Could not retrieve highlight. sorry!'
   }
+
+  document.body.appendChild(changeHighlightBox)
+  setTimeout(() => {
+    overlayUtils.forceOpacityOnChildren(changeHighlightBox)
+  }, 100)
+
 }
 vState.changeHlightColor = function (e) {
   const hColor = e.target.id.split('_')[2]
@@ -950,7 +1138,7 @@ vState.getHLightFrom = function (hlightId) {
     return null
   }
 }
-vState.highlightChangeOptionsBoxColorTable = function (currentColor = 'yellowgreen', hlightId, chooseNotChange = true) {
+vState.highlightChangeOptionsBoxColorTable = function (currentColor = THEME_COLORS.primary, hlightId, chooseNotChange = true) {
   const colorTable = overlayUtils.makeEl('div', '', '', '')
   for (const [key, value] of Object.entries(COLOR_MAP)) {
     if (currentColor !== key || !chooseNotChange) {
@@ -965,7 +1153,7 @@ vState.highlightChangeOptionsBoxColorTable = function (currentColor = 'yellowgre
   return colorTable
 }
 vState.setHColor = function (hColor, cb) {
-  // vState.currentHColor = hcolor
+  // vState.currentHColor = hColor
   vState.currentHColor = hColor
   chrome.runtime.sendMessage({ msg: 'setHColor', hColor, url: window.location.href }, function (response) {
     // non ios
@@ -979,7 +1167,18 @@ vState.setHColor = function (hColor, cb) {
 vState.scrollToHighLight = function (hlightId) {
   const theHLight = document.getElementById('vulog_hlight_' + hlightId)
   if (theHLight) {
-    theHLight.scrollIntoView()
+    // Get the element's position relative to the viewport
+    const rect = theHLight.getBoundingClientRect()
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+    
+    // Calculate the target scroll position with 100px offset to account for fixed headers
+    const targetScrollTop = scrollTop + rect.top - 100
+    
+    // Smooth scroll to the target position
+    window.scrollTo({
+      top: targetScrollTop,
+      behavior: 'smooth'
+    })
   } else {
     console.warn('hlight not found so cant scroll to it')
   }
@@ -1032,6 +1231,101 @@ const getAllMessagesAndUpdateStateteFor = async function (purl) {
   return { itemJson }
   // find purl in messages and update it
 }
+
+
+// pdf related ================================ ================================
+// Show PDF highlighting dialog
+function showPDFHighlightingDialog(hasExistingHighlights = false) {
+  // Used in chrome when the default pdf viewer is used - dialogue asks user to move to pdf.js viewerwith highlights
+  
+  // Remove any existing dialog
+  const existingDialog = document.getElementById('pdf-highlighting-overlay');
+  if (existingDialog) {
+    existingDialog.remove();
+  }
+  
+  // Create the dialog overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'pdf-highlighting-overlay';
+  overlay.className = 'pdf-highlighting-overlay';
+  
+  // Create the highlight notice text
+  const highlightNotice = hasExistingHighlights ? 
+    '<div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 10px; margin: 10px 0; color: #155724; font-size: 14px; font-weight: bold;">This document has highlights</div>' : '';
+  
+  overlay.innerHTML = `
+    <div style="background: white; padding: 30px; border: 3px solid ${THEME_COLORS.primary}; border-radius: 8px; text-align: center; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+      <h2>📝 PDF Highlighting</h2>
+      ${highlightNotice}
+      <p style="color: #666; margin: 0 0 20px 0; line-height: 1.4; font-size: 14px;">Press OK to enable highlighting</p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button id="enable-pdf-highlighting" class="vulog_overlay_butt greencol">OK</button>
+        <button id="view-pdf-only" class="vulog_overlay_butt bluecol">Cancel</button>
+      </div>
+    </div>
+  `;
+  
+  // Append to documentElement to bypass body overflow
+  document.documentElement.appendChild(overlay);
+  // onsole.log('✅ PDF highlighting dialog added');
+  
+  // Add event listeners
+  const enableBtn = document.getElementById('enable-pdf-highlighting');
+  const viewOnlyBtn = document.getElementById('view-pdf-only');
+  
+  if (enableBtn) {
+    enableBtn.addEventListener('click', () => {
+      // User chose to enable PDF highlighting
+      const viewerUrl = `chrome-extension://${chrome.runtime.id}/main/pdf_viewer.html?file=${encodeURIComponent(window.location.href)}`;
+      window.location.href = viewerUrl;
+    });
+  }
+  
+  if (viewOnlyBtn) {
+    viewOnlyBtn.addEventListener('click', () => {
+      // User chose view-only mode
+      overlay.remove();
+      showEnableHighlightingButton();
+    });
+  }
+  
+  // Close on escape key
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      showEnableHighlightingButton();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+}
+
+// Show "Enable Highlighting" button when user cancels
+function showEnableHighlightingButton() {
+  // Remove any existing button
+  const existingBtn = document.getElementById('pdf-enable-highlighting-btn');
+  if (existingBtn) {
+    existingBtn.remove();
+  }
+  
+  // Create the button
+  const button = document.createElement('button');
+  button.id = 'pdf-enable-highlighting-btn';
+  button.className = 'pdf-enable-highlighting-btn vulog_overlay_butt greencol';
+  button.textContent = 'Enable Highlighting';
+  
+  // Add click event
+  button.addEventListener('click', () => {
+    // User clicked Enable Highlighting button
+    const viewerUrl = `chrome-extension://${chrome.runtime.id}/main/pdf_viewer.html?file=${encodeURIComponent(window.location.href)}`;
+    window.location.href = viewerUrl;
+  });
+  
+  // Append to documentElement to bypass body overflow (same as dialog)
+  document.documentElement.appendChild(button);
+}
+
+
 
 // General Functions
 

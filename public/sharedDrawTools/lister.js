@@ -869,7 +869,10 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
 
     itemdiv.appendChild(titleOuter)
 
-    markOnMark.vHighlights.forEach(hlight => {
+    // Sort highlights by position (top to bottom)
+    const sortedHighlights = sortHighlightsByPosition(markOnMark.vHighlights)
+    
+    sortedHighlights.forEach(hlight => {
       if (hlight.vComments && hlight.vComments.length > 0) {
         hlight.vComments.forEach(comment => {
           if (!comment.sender_id) comment.sender_id = markOnMark._data_owner
@@ -1362,18 +1365,20 @@ lister.setItemExpandedStatus = async function (id) {
             if (vState.freezrMeta?.userId && doExpand && !vState.sharedmarks?.lookups[purl]) {
               if (!vState.sharedmarks) vState.sharedmarks = {}
               if (!vState.sharedmarks.lookups) vState.sharedmarks.lookups = {}
+              let errCode = null
               try {
                 await refreshSharedMarksinVstateFor(purl)
               } catch (e) {
                 console.warn('gotFetchErr 2 ', { e })
                 const sharingDiv = theDiv.querySelector('.sharingDetailsSkeleton')
                 gotFetchErr = true
+                errCode = e.code
                 sharingDiv.appendChild(dg.div({ style: errStyle }, 'Error getting public marks: ' + e.message))
               }
             }
             if (gotFetchErr) {
               console.warn({ gotFetchErr })
-              lister.postErrInSharingDetails(el)
+              lister.postErrInSharingDetails(el, errCode)
             } else {
               lister.redrawSharingDetails(el)
             }
@@ -1652,7 +1657,10 @@ lister.newDrawHighlights = function (purl, hLights, options) {
 
     if (!hLightOpts.hLightCommentSaver) console.error('No hLightOptions hLightCommentSaver 3 ', { optionscomm: JSON.stringify(options.hLightCommentSaver), hLightOptscomms: JSON.stringify(hLightOpts.hLightCommentSaver) })
 
-    hLights.forEach(hlight => {
+    // Sort highlights by position (top to bottom)
+    const sortedHighlights = sortHighlightsByPosition(hLights)
+    
+    sortedHighlights.forEach(hlight => {
       innerHighs.appendChild(overlayUtils.drawHighlight(purl, hlight, hLightOpts))
     })
   } else if (!vState.freezrMeta?.userId && options?.type !== 'msgHighLights') { // ie relatively new user
@@ -1727,9 +1735,11 @@ lister.sharingDetailsSkeleton = function (purl, options) {
   }, 100)
   return outer
 }
-lister.postErrInSharingDetails = function (sharingDiv) {
+lister.postErrInSharingDetails = function (sharingDiv, errCode) {
   sharingDiv.innerHTML = ''
-  sharingDiv.appendChild(dg.div({ style: errStyle }, 'Sorry there was an error connecting to the server please try again later'))
+  const errText = (errCode === 'storageLimitExceeded' ? 'You have exceeded your storage limit. Please contact your freezr server admin to increase your limit' : 
+    (errCode === 'expired' ? 'Your cookie has expired. Please go to settings to revalidate.' : 'Sorry there was an error connecting to the server please try again later'))
+  sharingDiv.appendChild(dg.div({ style: errStyle }, errText))
 }
 const permsFromFreezrMetaState = function () {
   const { freezrMeta } = vState
@@ -2296,7 +2306,7 @@ drawSharingSubsection._privatefeed = function (purl, options) {
                 if (!markCopy) throw new Error('No mark or log to convert')
                 markCopy.isPublic = false
                 if (buttonHolder.parentElement.querySelector('.vulog_overlay_input').innerText) markCopy.vComments = [{ text: buttonHolder.parentElement.querySelector('.vulog_overlay_input').innerText, vCreated: new Date().getTime() }]
-                console.warn('to publish', { markCopy })
+                // onsole.warn('to publish', { markCopy })
 
                 // deal with case of crashing here - isPublic is true but it is not shared.
                 const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
