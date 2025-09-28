@@ -1,7 +1,7 @@
 const isIos = function () {
   //  console.warn("TEMP -> SIMULATING IOS")
   //  return true
-  const platform = navigator?.userAgent || navigator?.platform || 'unknown'
+  const platform = navigator?.userAgent || 'unknown'
   return (/iPhone|iPod|iPad/.test(platform)) ||
     // iPad on iOS 13 detection
     (navigator.userAgent.includes('Mac') && 'ontouchend' in document)
@@ -30,14 +30,15 @@ document.addEventListener('DOMContentLoaded', function () {
       child.style.color = COLOR_MAP[hColor] || '#4CAF50'
     })
   })
-
   setTimeout(function () {
     if (isIos()) {
       document.getElementById('vulog_show_if_extension_is_installed').style.display = 'none'
       document.getElementById('vulog_show_if_NOT_installed').style.display = 'none'
       document.getElementById('vulog_show_if_IOS').style.display = 'block'
-      document.getElementById('vulog_show_if_IOS').style.display = 'block'
-      document.getElementById('IOS_LINK').href = 'hipercards://mark?href=' + window.location.href
+      const href = document.getElementById('IOS_LINK').href
+      const parts = window.location.href.split('?')
+      const finalQuery = '?url=' + parts[0] + '&mark=' + parts[0] + '&' + (parts[1] || 'nocodes=true') 
+      document.getElementById('IOS_LINK').href = 'hipercards://link' + finalQuery
     }
   }, 500)
 })
