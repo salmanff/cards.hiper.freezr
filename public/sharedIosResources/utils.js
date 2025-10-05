@@ -936,14 +936,19 @@ const overlayUtils = {
     return highlightOuter
   },
   drawHlightCommentsBox: function (purl, hLight, options) {
+    //  used in side bar from overlay and also in PDF viewer
     // options has to haev purl & mark and from non overlay, needs noteSaver
     // markOnBackEnd: options.markOnBackEnd, markOnMarks: options.markOnMarks, logToConvert: options.logToConvert
-
+    
     const outer = overlayUtils.makeEl('div', null, null)
 
-    if (!options.isOwn) {
+    // Check if highlight already exists in ownMarks (like in PDF viewer)
+    const highlightExistsInOwnMarks = vState.ownMark && vState.ownMark.vHighlights && 
+      vState.ownMark.vHighlights.some(h => h.id === hLight.id);
+    
+    if (!options.isOwn && !highlightExistsInOwnMarks) {
       const addToMarks = overlayUtils.makeEl('div', null, 'vulog_dialogue_butts bluecol')
-      addToMarks.innerText = 'Bookmark highlight'
+      addToMarks.innerText = 'Add to my highlights' // 'Bookmark highlight' - used in side bar overlay
       addToMarks.onclick = async function (e) {
         const eltoMark = e.target.parentElement.parentElement
         const resultMessage = overlayUtils.makeEl('div', null, { color: THEME_COLORS.danger, margin: '5px' })
@@ -965,7 +970,18 @@ const overlayUtils = {
               }
             })
           }
-          const hLightAddRet = await chrome.runtime.sendMessage({ purl: options.purl, highlight: hLight, msg: 'newHighlight', props: options.markOnMarks })
+          // Send basic props like PDF viewer - background will handle mark creation
+          const hLightAddRet = await chrome.runtime.sendMessage({ 
+            purl,
+            url: purl,
+            highlight: hLight, 
+            msg: 'newHighlight', 
+            props: { 
+              purl,
+              url: purl,
+              title: document.title || 'Web page'
+            }
+          })
           if (!hLightAddRet || !hLightAddRet.success) {
             throw new Error('unable to send message')
           } else {
@@ -2089,7 +2105,17 @@ const isChromeExtensionUrl = function (url) {
   return (url && url.indexOf('chrome-extension://') === 0)
 }
 const isHiperCardsPdfHighlighter = function (url) {
-  return isChromeExtensionUrl(url) && url.indexOf('pdf_viewer.html') > -1
+  // Check if this is our PDF viewer (either chrome extension or file://)
+  if (isChromeExtensionUrl(url) && url.indexOf('pdf_viewer.html') > -1) {
+    return true
+  }
+  
+  // Check if this is a file:// URL pointing to our PDF viewer (for ios app) // todo - also check that it is an iosapp
+  if (url && url.startsWith('file://') && url.indexOf('pdf_viewer.html') > -1) {
+    return true
+  }
+  
+  return false
 }
 const isHiperCardsPdfQueriedFile = function (url, fileUrl) {
   if (!url || !fileUrl || !isChromeExtensionUrl(url)) return false
@@ -2104,20 +2130,65 @@ const pdfFileUrlInhiperCardsQueryOf = function (url) {
   const urlParams = new URLSearchParams(url.split('?')[1]);
   return decodeURIComponent(urlParams.get('file') || '');
 }
-// Detect if Chrome's PDF viewer is active
-function detectChromesPDFViewer() {
+setTimeout(function () { // FOR IOS APP
+  // IOS: Don't run PDF detection if we're in the PDF viewer context
+  if (window.location.href.includes('pdf_viewer_ios.html') || 
+      document.title.includes('PDF Viewer - Hiper Cards')) {
+    return;
+  }
+}, 10000)
+// Detect if any PDF viewer is active (Chrome, Safari, etc.)
+const detectChromesPDFViewer = function () {
   try {
+    // IOS: Don't run PDF detection if we're in the PDF viewer context
+    if (window.location.href.includes('pdf_viewer_ios.html') || 
+      document.title.includes('PDF Viewer - Hiper Cards')) {
+      return false;
+    }
+    
     // onsole.log('🔍 detectChromesPDFViewer called');
     
-    // Check multiple indicators that Chrome's PDF viewer is active
+    // Check multiple indicators that a PDF viewer is active
     const pdfIndicators = {
+      // Chrome PDF viewer indicators
       hasEmbedElement: !!document.querySelector('embed[type="application/pdf"]'),
-      hasObjectElement: !!document.querySelector('object[type="application/pdf"]')
+      hasObjectElement: !!document.querySelector('object[type="application/pdf"]'),
+      
+      // Safari PDF viewer indicators
+      hasSafariPDFViewer: !!document.querySelector('#viewerContainer') || 
+                         !!document.querySelector('.pdfViewer') ||
+                         !!document.querySelector('[data-pdf-viewer]'),
+      
+      // Generic PDF indicators
+      hasPDFContent: !!document.querySelector('canvas[data-pdf-annotator]') ||
+                    !!document.querySelector('.textLayer') ||
+                    !!document.querySelector('.annotationLayer'),
+      
+      // Check if page title suggests PDF
+      hasPDFTitle: document.title.toLowerCase().includes('pdf') ||
+                  document.title.toLowerCase().includes('document'),
+      
+    };
+    
+    // Additional Safari-specific checks
+    const safariPDFChecks = {
+      // Check for Safari's built-in PDF viewer elements
+      hasSafariViewer: !!document.querySelector('#viewer') ||
+                      !!document.querySelector('.pdf-viewer') ||
+                      !!document.querySelector('[role="document"]'),
+      
+      // Check for PDF-specific CSS classes or IDs
+      hasPDFClasses: !!document.querySelector('[class*="pdf"]') ||
+                    !!document.querySelector('[id*="pdf"]'),
+      
+      // Check if the page has PDF-specific meta tags
+      hasPDFMeta: !!document.querySelector('meta[name="pdf"]') ||
+                 !!document.querySelector('meta[property="pdf"]')
     };
         
     // Return true if any PDF indicators are found
-    const isPDF = pdfIndicators.hasEmbedElement || 
-           pdfIndicators.hasObjectElement;
+    const isPDF = Object.values(pdfIndicators).some(Boolean) || 
+                  Object.values(safariPDFChecks).some(Boolean);
            
     return isPDF;
            
@@ -2125,6 +2196,32 @@ function detectChromesPDFViewer() {
     console.error('❌ Could not detect PDF viewer:', error);
     return false;
   }
+}
+
+// Detect if we're in an iOS app environment
+function isInIOSApp() {
+  // this is a duplicate of vState.isAppInjectedScript in overlay.js - todo: to merge??
+  const hasWebKit = typeof window.webkit !== 'undefined';
+  const hasMessageHandlers = hasWebKit && window.webkit.messageHandlers;
+  const hasNewPageInfoHandler = hasMessageHandlers && window.webkit.messageHandlers.newPageInfoForIosApp;
+    
+  return !!hasNewPageInfoHandler; // Convert to boolean
+}
+
+const isIOSPDFWithEmptyBody = function () {
+  // Don't detect our PDF viewer as a PDF
+  if (window.location.href.includes('pdf_viewer_ios.html') || 
+      document.title.includes('PDF Viewer - Hiper Cards')) {
+    return false;
+  }
+  
+  const bodyExists = !!document.body;
+  const bodyTextContent = bodyExists ? document.body.textContent : '';
+  const hasEmptyBody = !bodyExists || bodyTextContent === '';
+  const hasPDFURL = window.location.href.toLowerCase().includes('.pdf') ||
+                   window.location.href.toLowerCase().includes('application/pdf') ||
+                   window.location.href.toLowerCase().includes('/pdf/');
+  return hasEmptyBody && hasPDFURL;
 }
 
 const utilsDummy = false // for eslint exports

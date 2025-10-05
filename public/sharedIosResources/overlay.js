@@ -8,7 +8,7 @@
 // manage msg: marksDisplayErrs and hlightDisplayErr
 // showThis can be none (dont show any highlights), ownMark, redirectmark or messageMark
 
-/* global showWarning, chrome, overlayUtils, vulogPageDataFromSwift, pasteAsText, COLOR_MAP, isIos, pureUrlify, VuPageData, highlightFromSelection, alert, showHighlights, HIGHLIGHT_CLASS, freepr, freezr */
+/* global showWarning, chrome, overlayUtils, vulogPageDataFromSwift, pasteAsText, COLOR_MAP, isIos, pureUrlify, VuPageData, highlightFromSelection, alert, showHighlights, HIGHLIGHT_CLASS, freepr, freezr, isPDFThatNeedsRedirect, isInIOSApp */
 // console.log('overlay.js loaded')
 
 const vState = {
@@ -53,7 +53,7 @@ if (isHiperCardsPdfHighlighter(window.location.href)) {
   vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)  
 }
 vState.purl = vState.pageInfoFromPage.purl
-console.log('overlay vState', vState)
+// console.log('overlay vState', vState)
 
 if (!isIos()) {
   // vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
@@ -872,14 +872,24 @@ if (!isIos()) {
       setTimeout(function () {
         // reload data with delay as sometimes it takes more time for data to show up
         vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
-        // onsole.log('about to send message to app with refresded data', vState.pageInfoFromPage)
+        const url = window.location.href;
+         
+         // If we detect a PDF and are in iOS app, send message to Swift to load PDF viewer
+         // But don't do this if we're already in the PDF viewer context
+         if (isIOSPDFWithEmptyBody() && isInIOSApp() && 
+             !window.location.href.includes('pdf_viewer_ios.html') &&
+             !document.title.includes('PDF Viewer - Hiper Cards')) {
+           chrome.runtime.sendMessage({ msg: 'loadPDFViewer', pdfUrl: url });
+           return; // Don't send the regular message
+         }
+         
         chrome.runtime.sendMessage({ msg: 'newPageInfoForIosApp', url: window.location.href, pageInfoFromPage: vState.pageInfoFromPage },
           function (resp) {
             if (!resp || resp.error) console.warn('Handle Error sending info to background todo ', vState.pageInfoFromPage, resp)
             // onsole.log('do nothing ...')
           }
         )
-      }, 5000)
+      }, 100)
       setTimeout(function () { 
         // if (!vState.showThis) vState.showThis = 'ownMark' // 202507 nt sure why this was here
         if (!vState.showThis) console.warn('no showThis', { vState })
@@ -974,7 +984,7 @@ vState.drawHighlightChangeOptionsBox = function (e) {
       changeHighlightBox.appendChild(overlayUtils.drawCommentsSection(vState.pageInfoFromPage.purl, thehighLight))
     }
 
-    // this hsould go into drawHlightCommentsBox
+    // this should go into drawHlightCommentsBox
     // .. then dp vState.hideHighlighterDivs()
     const notesDiv = overlayUtils.makeEl('div', 'vulog_hlight_notes', 'vulog_overlay_input')
     notesDiv.setAttribute('contenteditable', 'true')
@@ -1067,7 +1077,7 @@ vState.drawHighlightChangeOptionsBox = function (e) {
     } else {
       // Show bookmark button instead of remove button
       const bookmarkButt = overlayUtils.makeEl('div', 'vulog_hlightbookmark_' + hlightId, 'vulog_dialogue_butts bluecol')
-      bookmarkButt.innerText = 'Bookmark Highlight'
+      bookmarkButt.innerText = 'Add to my highlights' // 2025-8 previously "Bookmark Highlight"
       bookmarkButt.onclick = function () {
         // Copy this highlight to own marks
         if (!vState.ownMark) vState.ownMark = {}

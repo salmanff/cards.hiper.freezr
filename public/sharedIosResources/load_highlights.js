@@ -26,16 +26,18 @@ const initiateHighlights = function () {
       } else {
         // onsole.log('Not a PDF viewer, proceeding with normal highlight loading');
         vState.displayErrs = showHighlights()
-        if (vState.displayErrs && vState.displayErrs.length > 0) {
-          chrome.runtime.sendMessage({ purl: vState.pageInfoFromPage.purl, msg: 'marksDisplayErrs', display_errs: vState.displayErrs }, function (response) {
-            // onsole.log(response)
+        if (vState.showVulogOverlay) { // vState.showVulogOverlay checked so this is ignored for ios
+          if (vState.displayErrs && vState.displayErrs.length > 0) { 
+            chrome.runtime.sendMessage({ purl: vState.pageInfoFromPage.purl, msg: 'marksDisplayErrs', display_errs: vState.displayErrs }, function (response) {
+              // onsole.log(response)
+              vState.showVulogOverlay()
+            })
+            // vState.showVulogOverlay('Some errors occured in displaying highlights. ' + errCount + (errCount === 1 ? ' highlight was not shown.' : ' highlights were not shown.'))
+          } else if (vState.ownMark || vState.redirectmark || vState.messageMark) {
             vState.showVulogOverlay()
-          })
-          // vState.showVulogOverlay('Some errors occured in displaying highlights. ' + errCount + (errCount === 1 ? ' highlight was not shown.' : ' highlights were not shown.'))
-        } else if (vState.ownMark || vState.redirectmark || vState.messageMark) {
-          vState.showVulogOverlay()
-        } else {
-          console.warn('vState NOT showing ovelay  ', { haveMark: Boolean(vState.ownMark), haveMessages: Boolean(vState.messageMark), haveRedirect: Boolean(vState.redirectmark) })
+          } else {
+            console.warn('vState NOT showing ovelay  ', { haveMark: Boolean(vState.ownMark), haveMessages: Boolean(vState.messageMark), haveRedirect: Boolean(vState.redirectmark) })
+          }
         }
       }
     })
@@ -441,9 +443,6 @@ function elementFromQuery (storedQuery, eltype, thestring) {
 
 /* 
   PDF Related Highlighting
-
-
-
 */
 
 if (
@@ -452,13 +451,13 @@ if (
 ) {
   // 2023-04 - reduce times - if notintiating highlights recheck to see if reduced too much - from 10s & 5s respectively
   setTimeout(function () {
-    console.log('Document ready, initiating highlights')
+    // console.log('Document ready, initiating highlights')
     initiateHighlights()
   }, 1000) // previousl 2
 } else {
     setTimeout(async function () {
       document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded, initiating highlights')
+        // console.log('DOM loaded, initiating highlights')
         initiateHighlights()
       })
   }, 3000) // previousl 4
