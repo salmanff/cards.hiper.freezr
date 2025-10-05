@@ -1,7 +1,7 @@
 {
   "identifier": "cards.hiper.freezr",
   "display_name": "hiper.cards",
-  "version": "0.0.601",
+  "version": "0.0.602",
   "description": "A bookmarker, highlighter and web history logger",
   "app_url": "https://github.com/salmanff/cards.hiper.freezr",
   "manifest_url": "https://github.com/salmanff/cards.hiper.freezr/blob/main/manifest.json",
