@@ -13,18 +13,21 @@ const initiateHighlights = function () {
     overlayOuter.style.display = 'none'
     document.body.appendChild(overlayOuter)
 
+    console.log('initiateHighlights', { vState })
+
     updateStatefromBackground(function () { 
       if (detectChromesPDFViewer()) {
-        // onsole.log('🎯 PDF viewer detected! Checking for existing highlights...');
+        console.log('detectChromesPDFViewer', { vState })
         if (isIos()) console.warn('🎯 PDF viewer detected! on ios - check what to d on safari')
-        const hasExistingHighlights = hasHighlights(vState[vState.showThis])
-        if (hasExistingHighlights) {
-          showPDFHighlightingDialog(hasExistingHighlights)
-        } else {
-          showEnableHighlightingButton()
+          const hasExistingHighlights = hasHighlights(vState[vState.showThis])
+          if (hasExistingHighlights) {
+            showPDFHighlightingDialog(hasExistingHighlights)
+          } else {
+            showEnableHighlightingButton()
         }
       } else {
         // onsole.log('Not a PDF viewer, proceeding with normal highlight loading');
+        console.log('Not a PDF viewer, proceeding with normal highlight loading', { vState })
         vState.displayErrs = showHighlights()
         if (vState.showVulogOverlay) { // vState.showVulogOverlay checked so this is ignored for ios
           if (vState.displayErrs && vState.displayErrs.length > 0) { 
@@ -451,13 +454,13 @@ if (
 ) {
   // 2023-04 - reduce times - if notintiating highlights recheck to see if reduced too much - from 10s & 5s respectively
   setTimeout(function () {
-    // console.log('Document ready, initiating highlights')
+    // onsole.log('Document ready, initiating highlights')
     initiateHighlights()
   }, 1000) // previousl 2
 } else {
     setTimeout(async function () {
       document.addEventListener('DOMContentLoaded', function() {
-        // console.log('DOM loaded, initiating highlights')
+        // onsole.log('DOM loaded, initiating highlights')
         initiateHighlights()
       })
   }, 3000) // previousl 4

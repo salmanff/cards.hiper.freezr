@@ -24,9 +24,10 @@ const MCSS = {
   LIGHT_GREY: 'rgb(151, 156, 160)',
   DARK_GREY: 'darkgrey',
   RED: 'indianred',
-  PURPLE: '#680368',
-  GREEN: '#057d47',
-  YGREENBG: '#79ac12'
+  PURPLE: '#4a30a0',    // messages background (deep purple)
+  GREEN: '#0a5c20',     // marks background (deep forest green)
+  YGREENBG: '#7a9e70',  // history background (light sage green)
+  TABS_BG: '#1b4a7a'    // tabs background (deep navy)
 }
 
 const pureUrlify = function (aUrl) {
@@ -896,13 +897,40 @@ const overlayUtils = {
 
 
     if (!options?.noThreeDots) {
-      const threeDots = overlayUtils.makeEl('div', null, { width: '100%', 'text-align': 'right', color: THEME_COLORS.secondary, 'font-size': '24px', 'margin-top': '-10px', 'margin-bottom': '5px' })
-      const threeDotsInner = overlayUtils.makeEl('span', null, { 'margin-right': '10px', height: '20px', size: '40px', cursor: 'pointer', 'font-weight': 'bold' }, '...')
+      const threeDots = overlayUtils.makeEl('div', null, {
+        width: '100%',
+        'text-align': 'right',
+        'margin-top': '4px',
+        'margin-bottom': '2px'
+      })
+      const threeDotsInner = overlayUtils.makeEl('span', null, {
+        display: 'inline-flex',
+        'align-items': 'center',
+        gap: '3px',
+        'margin-right': '6px',
+        padding: '2px 8px',
+        'border-radius': '10px',
+        cursor: 'pointer',
+        color: '#8a9ab0',
+        'font-size': '11px',
+        transition: 'background-color 0.15s, color 0.15s',
+        'user-select': 'none'
+      })
+      const dotsIcon = overlayUtils.makeEl('span', null, 'fa fa-ellipsis-h')
+      dotsIcon.style['font-size'] = '13px'
+      const dotsText = overlayUtils.makeEl('span', null, {}, 'more')
+      threeDotsInner.append(dotsIcon, dotsText)
+      threeDotsInner.onmouseenter = function (e) { e.currentTarget.style['background-color'] = '#f0f4f9'; e.currentTarget.style.color = '#3a6ea8' }
+      threeDotsInner.onmouseleave = function (e) { e.currentTarget.style['background-color'] = ''; e.currentTarget.style.color = '#8a9ab0' }
       threeDotsInner.onclick = function (e) {
-        e.target.parentElement.nextSibling.style.display = 'block'
-        //  e.target.parentElement.nextSibling.nextSibling.style.display = 'block'
-        e.target.parentElement.nextSibling?.firstChild?.firstChild?.focus()
-        e.target.parentElement.style.display = 'none'
+        const dotsDiv = e.currentTarget.parentElement
+        const notesBox = dotsDiv.nextSibling
+        notesBox.style.transition = 'opacity 0.2s ease-out'
+        notesBox.style.opacity = '0'
+        notesBox.style.display = 'block'
+        setTimeout(() => { notesBox.style.opacity = '1' }, 10)
+        notesBox?.firstChild?.firstChild?.focus()
+        dotsDiv.style.display = 'none'
         deleteButtOuter.style.display = 'block'
       }
       threeDots.append(threeDotsInner)
@@ -1083,8 +1111,42 @@ const overlayUtils = {
   // commenting - NB these need vState to function
   oneComment: function (purl, vComment, options) {
     // onsole.log('oneComment', { purl, vComment, options })
+    const BUBBLE_THEME = 'chat_app' // switch to 'soft_professional' for a flatter look
+    const BUBBLE_STYLES = {
+      soft_professional: {
+        incoming: {
+          color: '#4f5770',
+          background: '#f3f6fa',
+          border: '#dce3ed',
+          shadow: 'none'
+        },
+        outgoing: {
+          color: 'white',
+          background: '#7554c6',
+          border: '#6a49bc',
+          shadow: '0 1px 2px rgba(80, 51, 155, 0.25)'
+        }
+      },
+      chat_app: {
+        incoming: {
+          color: '#445063',
+          background: '#eef3fb',
+          border: '#d4dfef',
+          shadow: '0 1px 2px rgba(110, 130, 170, 0.18)'
+        },
+        outgoing: {
+          color: 'white',
+          background: '#6f49d8',
+          border: '#643dcd',
+          shadow: '0 2px 5px rgba(85, 54, 172, 0.35)'
+        }
+      }
+    }
+    const bubbleTheme = BUBBLE_STYLES[BUBBLE_THEME] || BUBBLE_STYLES.soft_professional
+    const bubbleMode = options.isReceived ? 'incoming' : 'outgoing'
+    const bubbleStyle = bubbleTheme[bubbleMode]
 
-    const oneComment = overlayUtils.makeEl('div', null, { 'margin-left': ((options?.isReceived || options?.noreply) ? '0px' : '20px') })
+    const oneComment = overlayUtils.makeEl('div', null, { 'margin-left': ((options?.isReceived || options?.noreply) ? '0px' : '18px') })
 
     if (!vComment) console.warn('no message details for ', { vComment } )
     if (!vComment) return oneComment.appendChild(overlayUtils.makeEl('div', null, null, 'Error: No message details'))
@@ -1144,12 +1206,13 @@ const overlayUtils = {
       oneComment.appendChild(overlayUtils.personOneLiner(vComment.recipients, false))
     }
     const textBox = overlayUtils.makeEl('div', null, {
-      color: (options.isReceived ? MCSS.PURPLE : 'white'),
-      'background-color': (options.isReceived ? 'lightgray' : MCSS.PURPLE),
-      border: '1px solid grey',
-      padding: (vComment.text ? '3px' : '0px 3px'),
-      'border-radius': '3px',
-      'margin-right': ((options.isReceived && !options?.noreply) ? '40px' : '0px'),
+      color: bubbleStyle.color,
+      'background-color': bubbleStyle.background,
+      border: '1px solid ' + bubbleStyle.border,
+      padding: (vComment.text ? '6px 8px' : '2px 8px'),
+      'border-radius': '12px',
+      'margin-right': ((options.isReceived && !options?.noreply) ? '30px' : '0px'),
+      'box-shadow': bubbleStyle.shadow
     }, vComment.text || ((vComment.hLightsCopy && vComment.hLightsCopy.length > 0 && vComment.hLightsCopy[0].vComments && vComment.hLightsCopy[0].vComments.length > 0 && vComment.hLightsCopy[0].vComments[0].text) ?  vComment.hLightsCopy[0].vComments[0].text : null) || ' ')
     //  vComment.hLightsCopy[0].string should be function grabbing first comment in highlight
     if (vComment.text === ' ') textBox.border = '1px solid purple'
@@ -1166,10 +1229,11 @@ const overlayUtils = {
 
     const bottomLine = overlayUtils.makeEl('div', null, {
       'padding-right': '5px',
-      'margin-bottom': '10px',
-      'margin-right': ((options.isReceived && !options?.noreply) ? '40px' : '0px'),
+      'margin-bottom': (options?.oneLiner ? '2px' : '8px'),
+      'margin-right': ((options.isReceived && !options?.noreply) ? '30px' : '0px'),
       'font-size': 'smaller',
-      color: 'darkgray'
+      color: 'darkgray',
+      overflow: 'hidden'
     })
 
     if (vComment.recipientStatus && vComment.recipientStatus && vComment.recipientStatus.length > 0) {
@@ -1227,8 +1291,14 @@ const overlayUtils = {
     })
     messageBox.onpaste = convertPasteToText
     messageBox.className = 'messageBox vulog_overlay_input'
-    messageBox.style.border = '1px solid lightgrey'
+    messageBox.style.border = '1.5px solid #d5deea'
+    messageBox.style['border-radius'] = '8px'
+    messageBox.style['background-color'] = 'white'
+    messageBox.style.padding = '10px 12px'
+    messageBox.style['min-height'] = '42px'
     messageBox.style['max-height'] = 'none'
+    messageBox.style['font-size'] = '13px'
+    messageBox.style.color = '#2e3a4a'
     if (wip.text) messageBox.innerText = wip.text
 
     const clickSendMessage = async function (e) {
@@ -1340,7 +1410,7 @@ const overlayUtils = {
         if (!itemJson || !itemJson.vComments) { console.warn('no ivComments for ', { itemJson, updateStatus })}
         setTimeout(() => {
           const vMessageCommentDetailsDiv = cardParent.querySelector('.vMessageCommentDetails')
-          if (vMessageCommentDetailsDiv) overlayUtils.vMessageCommentDetails(purl, itemJson?.vComments, vMessageCommentDetailsDiv)
+          if (vMessageCommentDetailsDiv) overlayUtils.vMessageCommentDetails(purl, itemJson?.vComments, vMessageCommentDetailsDiv, itemJson)
           const vMessageCommentSummaryDiv = cardParent.querySelector('.vMessageCommentSummary')
           if (vMessageCommentSummaryDiv) overlayUtils.vMessageCommentSummary(itemJson || { purl }, vMessageCommentSummaryDiv)
         }, 5000)
@@ -1373,11 +1443,90 @@ const overlayUtils = {
     if (new Date().setHours(0, 0, 0, 0) === new Date(vCreated).setHours(0, 0, 0, 0)) return new Date(vCreated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     return new Date(vCreated).toLocaleDateString()
   },
+  replaceMarkReadButtonsForPurl: function (purl) {
+    if (!purl) return
+    const allMarkReadButtons = document.querySelectorAll('.vulog_mark_read_button')
+    allMarkReadButtons.forEach(button => {
+      if (button?.getAttribute('data-purl') !== purl) return
+      const markedText = overlayUtils.makeEl('span', null, {
+        color: '#7b8694',
+        'font-size': button.style['font-size'] || '11px',
+        'font-weight': '600',
+        'line-height': '1.3',
+        'white-space': 'nowrap'
+      }, 'Marked as read')
+      if (button.style.float) markedText.style.float = button.style.float
+      if (button.style['margin-top']) markedText.style['margin-top'] = button.style['margin-top']
+      if (button.style['margin-left']) markedText.style['margin-left'] = button.style['margin-left']
+      button.replaceWith(markedText)
+    })
+  },
+  makeMarkReadButton: function (msgRecord, options = {}) {
+    const unreadFromOptions = Array.isArray(options.unreadMsgIds) ? options.unreadMsgIds.filter(Boolean) : []
+    const unreadFromStats = Array.isArray(msgRecord?.stats?.unreadMsgIds) ? msgRecord.stats.unreadMsgIds.filter(Boolean) : []
+    const unreadFromComments = Array.isArray(options.vComments)
+      ? options.vComments
+        .filter(vComment => vComment?._id && !isOwnComment(vComment) && !(vComment.marked_read || vComment.mark_read))
+        .map(vComment => vComment._id)
+      : []
+    const unreadMsgIds = unreadFromOptions.length > 0
+      ? unreadFromOptions
+      : (unreadFromStats.length > 0 ? unreadFromStats : unreadFromComments)
+    if (unreadMsgIds.length === 0) return null
+
+    const button = overlayUtils.makeEl('button', null, {
+      border: '1px solid #6f49d8',
+      'border-radius': '12px',
+      'background-color': 'white',
+      color: '#6f49d8',
+      cursor: 'pointer',
+      'font-size': options.compact ? '10px' : '11px',
+      'font-weight': '600',
+      padding: options.compact ? '2px 8px' : '3px 10px',
+      'line-height': '1.3',
+      'white-space': 'nowrap'
+    }, options.label || 'Mark read')
+    button.className = 'vulog_mark_read_button'
+    const purl = msgRecord?.purl || options?.purl
+    if (purl) button.setAttribute('data-purl', purl)
+
+    button.onclick = async function () {
+      button.disabled = true
+      button.style.cursor = 'default'
+      button.style.opacity = '0.8'
+      button.innerText = 'Marking...'
+
+      const resp = await vState.markMsgAsRead(unreadMsgIds)
+      if (resp && !resp.error) {
+        if (vState?.gotMsgs?.unfilteredItems) {
+          vState.gotMsgs.unfilteredItems.forEach(msg => {
+            if (unreadMsgIds.indexOf(msg._id) > -1) msg.marked_read = true
+          })
+        }
+        if (msgRecord?.stats?.unreadMsgIds) {
+          msgRecord.stats.unreadMsgIds = msgRecord.stats.unreadMsgIds.filter(id => unreadMsgIds.indexOf(id) < 0)
+        }
+        if (purl) {
+          overlayUtils.replaceMarkReadButtonsForPurl(purl)
+        } else if (typeof options.onMarkedRead === 'function') {
+          options.onMarkedRead(button)
+        } else {
+          button.innerText = 'Marked as read'
+        }
+      } else {
+        button.disabled = false
+        button.style.cursor = 'pointer'
+        button.style.opacity = '1'
+        button.innerText = options.label || 'Mark read'
+      }
+    }
+    return button
+  },
   // drawing messages
   vMessageCommentSummary: function (msgRecord, existingDiv) {
     const purl = msgRecord.purl
     const vComments = msgRecord.vComments
-    const outer = existingDiv || overlayUtils.makeEl('div', null, { 'margin-top': '10px', 'border-top': '1px lightgrey solid', 'padding-top': '10px' })
+    const outer = existingDiv || overlayUtils.makeEl('div', null, { 'margin-top': '8px', 'border-top': '1px #e4eaf2 solid', 'padding-top': '8px' })
     outer.className = 'vMessageCommentSummary'
     outer.innerHTML = ''
     const { lastSentComment, lastReceivedComment, numSentComments, numReceivedComments, numComments } = overlayUtils.commentData(vComments)
@@ -1387,45 +1536,59 @@ const overlayUtils = {
     const unreadMsgCount = msgRecord.stats?.unreadMsgIds.length
 
     if (unreadMsgCount > 0) {
-      const unReadDiv = overlayUtils.makeEl('div', null, null, null)
-      unReadDiv.appendChild(overlayUtils.makeEl('div', null, { color: 'purple', 'font-weight': 'bold', 'font-size': '20px', 'text-align': 'center' }, unreadMsgCount + ' new message' + (unreadMsgCount > 1 ? 's' : '') + '!'))
-      unReadDiv.appendChild(overlayUtils.makeEl('span', null, { }, (numReceivedComments > 1 ? ('Latest: ') : '... ')))
-      markRead = overlayUtils.makeEl('span', null, { color: THEME_COLORS.secondary, cursor: 'pointer', float: 'right' }, ' (Mark' + (unreadMsgCount > 1 ? ' all' : '') + ' as read)')
-      markRead.onclick = async function (e) {
-        const resp = await vState.markMsgAsRead(msgRecord.stats.unreadMsgIds)        
-        
-        // onsole.log('marking as read resp in utils', { resp, msgs: msgRecord.stats.unreadMsgIds })
-        if (resp && !resp.error) {
-          vState.gotMsgs.unfilteredItems.forEach(msg => { if (msgRecord.stats.unreadMsgIds.indexOf(msg._id) > -1) msg.marked_read = true })
-          msgRecord.stats.unreadMsgIds = []
-          e.target.parentElement.innerHTML = 'Marked as read'
-          // should refresh page if tab is showing
-        }
+      const unReadDiv = overlayUtils.makeEl('div', null, { display: 'flex', 'align-items': 'center', gap: '6px', 'flex-wrap': 'wrap' }, null)
+      const badge = overlayUtils.makeEl('span', null, {
+        display: 'inline-flex', 'align-items': 'center', gap: '4px',
+        'background-color': '#6f49d8', color: 'white', 'font-size': '11px', 'font-weight': 'bold',
+        'border-radius': '999px', padding: '2px 8px', 'white-space': 'nowrap'
+      })
+      const icon = overlayUtils.makeEl('span', null, { 'font-size': '11px' })
+      icon.className = 'fa fa-envelope'
+      badge.appendChild(icon)
+      badge.appendChild(overlayUtils.makeEl('span', null, null, unreadMsgCount + ' new'))
+      unReadDiv.appendChild(badge)
+      const latestLabel = overlayUtils.makeEl('span', null, { color: '#7b8694', 'font-size': '11px' }, (numReceivedComments > 1 ? 'Latest:' : ''))
+      unReadDiv.appendChild(latestLabel)
+      const markRead = overlayUtils.makeMarkReadButton(msgRecord)
+      if (markRead) {
+        markRead.style['margin-left'] = 'auto'
+        unReadDiv.appendChild(markRead)
       }
-      unReadDiv.appendChild(markRead)
       outer.appendChild(unReadDiv)
     } else if (numReceivedComments > 0) {
-      outer.appendChild(overlayUtils.makeEl('div', null, { }, (numReceivedComments > 1 ? ('Last of ' + numReceivedComments + ' messages received:') : 'Received: ')))
+      outer.appendChild(overlayUtils.makeEl('div', null, { color: '#9aabb9', 'font-size': '10px', 'margin-bottom': '1px' }, (numReceivedComments > 1 ? ('Last of ' + numReceivedComments + ' received:') : 'Received:')))
     }
     if (lastReceivedComment) {
-        const inner = overlayUtils.oneComment(purl, lastReceivedComment, { isReceived: true, oneLiner: true })
-        outer.appendChild(inner)
+      const inner = overlayUtils.oneComment(purl, lastReceivedComment, { isReceived: true, oneLiner: true })
+      outer.appendChild(inner)
     }
 
     if (numSentComments > 0) {
-      outer.appendChild(overlayUtils.makeEl('div', null, { }, (numSentComments > 1 ? ('Latest of ' + numSentComments + ' messages sent:') : 'Sent: ')))
+      outer.appendChild(overlayUtils.makeEl('div', null, { color: '#9aabb9', 'font-size': '10px', 'margin-top': '3px', 'margin-bottom': '1px' }, (numSentComments > 1 ? ('Latest of ' + numSentComments + ' sent:') : 'Sent:')))
       outer.appendChild(overlayUtils.oneComment(purl, lastSentComment, { isReceived: false, oneLiner: true }))
     }
 
     return outer
   },
-  vMessageCommentDetails: function (purl, vComments, existingDiv) {
+  vMessageCommentDetails: function (purl, vComments, existingDiv, msgRecord) {
     const outer = existingDiv || overlayUtils.makeEl('div', null, { display: 'none' })
     outer.className = 'vMessageCommentDetails'
     outer.innerHTML = ''
     if (!vComments || vComments.length === 0) return outer
 
-    outer.appendChild(overlayUtils.areaTitle('Messages'))
+    const messageTitle = overlayUtils.areaTitle('Messages')
+    const msgRecordForReadButton = msgRecord || vState.messages?.lookups?.[purl] || { purl }
+    const markReadButton = overlayUtils.makeMarkReadButton(msgRecordForReadButton, {
+      vComments,
+      compact: true
+    })
+    if (markReadButton) {
+      markReadButton.style.float = 'right'
+      markReadButton.style['margin-top'] = '-2px'
+      markReadButton.style['margin-left'] = '8px'
+      messageTitle.appendChild(markReadButton)
+    }
+    outer.appendChild(messageTitle)
 
     const { numComments } = overlayUtils.commentData(vComments)
 
@@ -1492,9 +1655,9 @@ const overlayUtils = {
     const oneLiner = overlayUtils.makeEl('div', null, { 
       overflow: 'hidden', 
       'white-space': 'nowrap', 
-      color: MCSS.PURPLE, 
+      color: received ? '#445063' : '#6f49d8',
       'padding-left': '4px', 
-      'margin-top': '10px',
+      'margin-top': '3px',
       display: 'flex',
       'align-items': 'center',
       'flex-direction': received ? 'row' : 'row-reverse'
@@ -1574,7 +1737,7 @@ const overlayUtils = {
   },
   personPictUrl: function (personId, personHost) {
     if (!personHost && vState?.isExtension) personHost = vState.freezrMeta?.serverAddress
-    return (personHost || '') + '/publicfiles/@' + personId + '/info.freezr.account/profilePict.jpg'
+    return (personHost || '') + '/@' + personId + '/info.freezr.account.files/profilePict.jpg'
   },
   fullPersonString: function (personId, personHost) {
     const isSameServer = !personHost || personHost === vState.freezrMeta?.serverAddress 
@@ -1611,7 +1774,7 @@ const overlayUtils = {
     const username = hLightOrComment.recipient_id || hLightOrComment.username
     const serverurl = hLightOrComment.recipient_host || hLightOrComment.serverurl
     let text = username
-    if (serverurl && serverurl !== vState.freezrMeta.serverAddress) text += ('@' + domainAppFromUrl(serverurl))
+    if (serverurl && serverurl !== vState.freezrMeta?.serverAddress) text += ('@' + domainAppFromUrl(serverurl))
     return text
   },
   allReceipientAndSenderNames: function (hLightOrComment) {
@@ -1714,16 +1877,17 @@ const overlayUtils = {
   redrawFriendScrollerFor: function (purl, existingDiv) {
     const wip = vState.messages.wip[purl]
     const emptyOuter = overlayUtils.makeEl('div', null, {
-      height: '75px',
+      height: '88px',
       width: '100%',
       'overflow-y': 'hidden',
-      'overflow-x': 'scroll',
-      background: 'lightgrey',
-      // display: 'grid',
-      // 'grid-auto-flow': 'column',
-      // 'grid-template-columns': 'repeat(' + vState.friends.length + ', 70px)',
-      // margin: '0 auto',
-      'white-space': 'nowrap'
+      'overflow-x': 'auto',
+      background: '#f5f7fa',
+      border: '1px solid #e0e8f0',
+      'border-radius': '8px',
+      padding: '8px',
+      'margin-bottom': '8px',
+      'white-space': 'nowrap',
+      'box-sizing': 'border-box'
     })
     emptyOuter.className = 'friendScroller'
     const outer = existingDiv || emptyOuter
@@ -1739,8 +1903,6 @@ const overlayUtils = {
       vState.friends.forEach(f => {
         if (f.username) {
           const friendPict = overlayUtils.drawComplexFriend(f, purl)
-          const existing = wip.chosenFriends.find((f2) => f2.searchname === f.searchname)
-          if (existing) friendPict.style.background = 'purple'
           outer.appendChild(friendPict)
         } else if (f._date_created > 1709362100000) { // old bug
           console.warn('empty friend found')
@@ -1750,27 +1912,37 @@ const overlayUtils = {
     return outer
   },
   drawComplexFriend: function (friend, purl, options) {
+    const wip = vState.messages?.wip?.[purl]
+    const isSelected = wip?.chosenFriends ? wip.chosenFriends.findIndex((f) => f.searchname === friend.searchname) > -1 : false
+    
     const outer = overlayUtils.makeEl('div', null, {
-      display: 'inline-block',
-      margin: '2px',
-      padding: '2px',
+      display: 'inline-flex',
+      'flex-direction': 'column',
+      'align-items': 'center',
+      gap: '4px',
+      margin: '3px',
+      padding: '6px',
       'text-align': 'center',
-      border: '1px solid lightgrey',
-      'border-radius': '8px',
+      border: isSelected ? '2px solid #6f49d8' : '1.5px solid #e0e8f0',
+      'border-radius': '12px',
+      'background-color': isSelected ? '#f3f0fd' : 'white',
       cursor: 'pointer',
-      width: '50px',
-      height: '54px'
+      width: '58px',
+      'vertical-align': 'top',
+      transition: 'all 0.15s ease-out',
+      'box-shadow': isSelected ? '0 2px 6px rgba(111, 73, 216, 0.2)' : 'none'
     })
     outer.className = 'friend'
     const friendPictOrInitial = overlayUtils.personPictOrInitial(friend, options)
     const friendName = overlayUtils.makeEl('div', null, {
-      'font-weight': 'bold',
+      'font-weight': isSelected ? '600' : '500',
       overflow: 'hidden',
-      padding: '2px',
-      width: '48px',
+      padding: '0',
+      width: '100%',
       'white-space': 'nowrap',
       'text-overflow': 'ellipsis',
-      'max-height': '14px'
+      'font-size': '11px',
+      color: isSelected ? '#6f49d8' : '#4a5a6a'
     }, friend.nickname)
     outer.appendChild(friendPictOrInitial)
     outer.appendChild(friendName)
@@ -1797,25 +1969,41 @@ const overlayUtils = {
     const outer = existingDiv || overlayUtils.makeEl('div', null, 'messageSendingArea')
     outer.innerHTML = ''
     outer.style.height = 'auto'
+    outer.style['margin-bottom'] = '12px'
     const wip = vState.messages.wip[purl]
     if (!vState.friends || vState.friends.length === 0) {
       outer.appendChild(overlayUtils.makeEl('div', null, { padding: '5px' }, 'No friends found. refresh this page or...'))
       outer.appendChild(overlayUtils.makeEl('a', null, { href: vState.freezrMeta?.serverAddress +'/acount/contacts', padding: '5px' }, 'Add or edit friends on your server.'))
     } else if (wip.chosenFriends.length === 0) {
-      outer.appendChild(overlayUtils.makeEl('div', null, { padding: '5px' }, 'Select a friend to send messages.'))
+      outer.appendChild(overlayUtils.makeEl('div', null, { padding: '8px 10px', color: '#8a9ab0', 'font-size': '12px' }, 'Select a friend to send messages.'))
     } else {
-      const recipients = overlayUtils.makeEl('div', null, { padding: '5px', color: 'purple' }, 'Send message to: ')
+      const recipients = overlayUtils.makeEl('div', null, {
+        padding: '8px 10px 4px 10px',
+        color: '#6f49d8',
+        'font-size': '12px',
+        'font-weight': '600'
+      }, 'Send message to:')
       wip.chosenFriends.forEach(friend => {
-        const friendOuter = overlayUtils.makeEl('div', null, { 'padding-left': '5px' })
+        const friendOuter = overlayUtils.makeEl('div', null, {
+          display: 'flex',
+          'align-items': 'center',
+          gap: '6px',
+          padding: '4px 10px',
+          'margin-top': '2px'
+        })
         // ugly hack to resovlve inconsitency
         if (!friend.username && friend.recipient_id) friend.username = friend.recipient_id
         if (!friend.serverurl && friend.recipient_host) friend.serverurl = friend.recipient_host
 
-        friendOuter.appendChild(overlayUtils.personPict(friend, null, { addSpace: true, width: '15px' }))
+        friendOuter.appendChild(overlayUtils.personPict(friend, null, { addSpace: true, width: '18px' }))
 
-        const textOuter = overlayUtils.makeEl('span', null, { height: '12px' })
-        if (friend.nickname) textOuter.appendChild(overlayUtils.makeEl('span', null, { 'font-weight': 'bold' }), friend.nickname + ': ')
-        textOuter.appendChild(overlayUtils.makeEl('span', null, null, (overlayUtils.fullPersonString(friend.username, friend.serverurl))))
+        const textOuter = overlayUtils.makeEl('span', null, { 'font-size': '12px', color: '#4a5a6a' })
+        if (friend.nickname) {
+          textOuter.appendChild(overlayUtils.makeEl('span', null, { 'font-weight': '600', color: '#2e4a6e' }, friend.nickname))
+          textOuter.appendChild(overlayUtils.makeEl('span', null, { color: '#8a9ab0', 'margin-left': '4px' }, overlayUtils.fullPersonString(friend.username, friend.serverurl)))
+        } else {
+          textOuter.appendChild(overlayUtils.makeEl('span', null, { 'font-weight': '500' }, overlayUtils.fullPersonString(friend.username, friend.serverurl)))
+        }
         friendOuter.appendChild(textOuter)
         recipients.appendChild(friendOuter)
       })
@@ -1829,17 +2017,19 @@ const overlayUtils = {
   // other...
   areaTitle: function (type, options) {
     const types = {
-      Sharing: { color: 'purple' },
-      Messages: { color: 'purple' },
-      Highlights: { color: '#057d47'}
+      Sharing: { color: '#6f49d8' },
+      Messages: { color: '#6f49d8' },
+      Highlights: { color: '#0a5c20' }
     }
-    const h3 = document.createElement(options?.tag || 'div') // g3 clashes with tailwind that can reduce foint size 
+    const h3 = document.createElement(options?.tag || 'div')
     h3.className = type + 'Title'
     h3.innerText = options?.title || type
-    h3.style['border-top'] = '1px solid lightgrey'
-    h3.style['padding-top'] = '20px'
-    h3.style['font-size'] = 'medium'
-    h3.style['font-weight'] = 'bold'
+    h3.style['border-top'] = '1px solid #e0e8f0'
+    h3.style['padding-top'] = type === 'Highlights' ? '28px' : '20px'
+    h3.style['padding-bottom'] = '6px'
+    h3.style['font-size'] = '14px'
+    h3.style['font-weight'] = '700'
+    h3.style['letter-spacing'] = '0.02em'
     h3.style.color = (type && types[type]) ? types[type].color : (options?.color || 'black')
     if (options?.display) h3.style.display = options.display
     return h3
@@ -2131,65 +2321,38 @@ const pdfFileUrlInhiperCardsQueryOf = function (url) {
   return decodeURIComponent(urlParams.get('file') || '');
 }
 setTimeout(function () { // FOR IOS APP
+  // Only run in browser context where window is available
+  if (typeof window === 'undefined') return;
+  
   // IOS: Don't run PDF detection if we're in the PDF viewer context
   if (window.location.href.includes('pdf_viewer_ios.html') || 
       document.title.includes('PDF Viewer - Hiper Cards')) {
     return;
   }
 }, 10000)
-// Detect if any PDF viewer is active (Chrome, Safari, etc.)
+// Detect if any PDF viewer is active (in Chrome, etc.)
 const detectChromesPDFViewer = function () {
   try {
+    // Only run in browser context where window is available
+    if (typeof window === 'undefined') return false;
+    
     // IOS: Don't run PDF detection if we're in the PDF viewer context
     if (window.location.href.includes('pdf_viewer_ios.html') || 
       document.title.includes('PDF Viewer - Hiper Cards')) {
       return false;
     }
     
-    // onsole.log('🔍 detectChromesPDFViewer called');
-    
-    // Check multiple indicators that a PDF viewer is active
-    const pdfIndicators = {
-      // Chrome PDF viewer indicators
-      hasEmbedElement: !!document.querySelector('embed[type="application/pdf"]'),
-      hasObjectElement: !!document.querySelector('object[type="application/pdf"]'),
-      
-      // Safari PDF viewer indicators
-      hasSafariPDFViewer: !!document.querySelector('#viewerContainer') || 
-                         !!document.querySelector('.pdfViewer') ||
-                         !!document.querySelector('[data-pdf-viewer]'),
-      
-      // Generic PDF indicators
-      hasPDFContent: !!document.querySelector('canvas[data-pdf-annotator]') ||
-                    !!document.querySelector('.textLayer') ||
-                    !!document.querySelector('.annotationLayer'),
-      
-      // Check if page title suggests PDF
-      hasPDFTitle: document.title.toLowerCase().includes('pdf') ||
-                  document.title.toLowerCase().includes('document'),
-      
-    };
-    
-    // Additional Safari-specific checks
-    const safariPDFChecks = {
-      // Check for Safari's built-in PDF viewer elements
-      hasSafariViewer: !!document.querySelector('#viewer') ||
-                      !!document.querySelector('.pdf-viewer') ||
-                      !!document.querySelector('[role="document"]'),
-      
-      // Check for PDF-specific CSS classes or IDs
-      hasPDFClasses: !!document.querySelector('[class*="pdf"]') ||
-                    !!document.querySelector('[id*="pdf"]'),
-      
-      // Check if the page has PDF-specific meta tags
-      hasPDFMeta: !!document.querySelector('meta[name="pdf"]') ||
-                 !!document.querySelector('meta[property="pdf"]')
-    };
+    // the below doesnt trigger due o shadow dom
+    const chromePDFIndicator = !!document.querySelector('embed[type="application/x-google-chrome-pdf"]')
+    // Check for Chrome PDF viewer using CSS link (more reliable than shadow DOM embed)
+    const chromePDFCSSIndicator = !!document.querySelector('link[href*="pdf_embedder.css"]')
+    // Works in both Chrome and Edge (and Firefox) when browser is directly rendering a PDF (2026-02 via cursor)
+    const contentTypeIndicator = document.contentType === 'application/pdf'
         
     // Return true if any PDF indicators are found
-    const isPDF = Object.values(pdfIndicators).some(Boolean) || 
-                  Object.values(safariPDFChecks).some(Boolean);
-           
+    const isPDF = chromePDFIndicator || chromePDFCSSIndicator || contentTypeIndicator
+            // || Object.values(pdfIndicators).some(Boolean) || Object.values(safariPDFChecks).some(Boolean);
+    // onsole.log('🔍 detectChromesPDFViewer results', { isPDF, chromePDFIndicator, chromePDFCSSIndicator, contentTypeIndicator })
     return isPDF;
            
   } catch (error) {
@@ -2200,6 +2363,9 @@ const detectChromesPDFViewer = function () {
 
 // Detect if we're in an iOS app environment
 function isInIOSApp() {
+  // Only run in browser context where window is available
+  if (typeof window === 'undefined') return false;
+  
   // this is a duplicate of vState.isAppInjectedScript in overlay.js - todo: to merge??
   const hasWebKit = typeof window.webkit !== 'undefined';
   const hasMessageHandlers = hasWebKit && window.webkit.messageHandlers;
@@ -2209,6 +2375,9 @@ function isInIOSApp() {
 }
 
 const isIOSPDFWithEmptyBody = function () {
+  // Only run in browser context where window is available
+  if (typeof window === 'undefined') return false;
+  
   // Don't detect our PDF viewer as a PDF
   if (window.location.href.includes('pdf_viewer_ios.html') || 
       document.title.includes('PDF Viewer - Hiper Cards')) {

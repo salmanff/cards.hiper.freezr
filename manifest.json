@@ -83,7 +83,8 @@
         "vulog_ttl_time": { "type": "string", "description": " " },
         "vulog_visit_details": { "type": "string", "description": " " },
         "vulog_visits": { "type": "string", "description": " " }
-      }
+      },
+      "card": "public/vulogcard.html"
     },
     "sharedmarks": {
       "field_names": {
@@ -108,7 +109,8 @@
         "pubDate": "__date_Published",
         "imgurl": "image",
         "imgtitle": null
-      }
+      },
+      "card": "public/vulogcard.html"
 
     },
     "marks": {
@@ -144,7 +146,8 @@
         "pubDate": "__date_Published",
         "imgurl": "image",
         "imgtitle": null
-      }
+      },
+      "card": "public/vulogcard.html"
     }
   },
 

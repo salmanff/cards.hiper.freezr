@@ -55,6 +55,23 @@ if (isHiperCardsPdfHighlighter(window.location.href)) {
 vState.purl = vState.pageInfoFromPage.purl
 // console.log('overlay vState', vState)
 
+// Inject FontAwesome @font-face so content script icons render correctly.
+// Content script CSS can't resolve extension-relative font URLs, so we
+// build absolute chrome-extension:// URLs via chrome.runtime.getURL().
+;(function injectFontAwesomeFace () {
+  if (document.getElementById('hipercards-fa-fontface')) return
+  const base = 'static/fonts/fontawesome-webfont'
+  const style = document.createElement('style')
+  style.id = 'hipercards-fa-fontface'
+  style.textContent = `@font-face {
+  font-family: 'FontAwesome';
+  src: url('${chrome.runtime.getURL(base + '.woff2')}') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}`
+  document.head.appendChild(style)
+})()
+
 if (!isIos()) {
   // vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
   if (window.self === window.top) {
@@ -844,6 +861,25 @@ if (!isIos()) {
 
   const finishLoading = function () {
     vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
+    const shouldRetryLowQualityTitle = function () {
+      const HAPHAZARDLY_CHOSEN_LENGTH = 15 // more than x.com and instagram.com
+      const currentTitle = (vState.pageInfoFromPage?.title || '').trim()
+      if (!currentTitle || currentTitle.length <= HAPHAZARDLY_CHOSEN_LENGTH || currentTitle.toLowerCase() === 'x') return true
+      return false
+    }
+    const sendPageInfoToIos = function (retryReason) {
+      // reload data as hydration may happen after initial page load
+      vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
+      vState.pageInfoFromPage.metaRetryReason = retryReason
+      if (vState.pageInfoFromPage && vState.pageInfoFromPage.xTitleDebug) {
+        vState.pageInfoFromPage.xTitleDebug.retryReason = retryReason
+      }
+      chrome.runtime.sendMessage({ msg: 'newPageInfoForIosApp', url: window.location.href, pageInfoFromPage: vState.pageInfoFromPage },
+        function (resp) {
+          if (!resp || resp.error) console.warn('Handle Error sending info to background todo ', vState.pageInfoFromPage, resp)
+        }
+      )
+    }
     if (!vState.isAppInjectedScript) {
       chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === 'newPageInfo') {
@@ -870,7 +906,7 @@ if (!isIos()) {
       const mark = vulogPageDataFromSwift || (vState.pageInfoFromPage || {})
       vState.ownMark = mark
       setTimeout(function () {
-        // reload data with delay as sometimes it takes more time for data to show up
+        // initial metadata send
         vState.pageInfoFromPage = (new VuPageData({ ignoreNonStandard: true, ignoreCookies: true }).props)
         const url = window.location.href;
          
@@ -879,16 +915,25 @@ if (!isIos()) {
          if (isIOSPDFWithEmptyBody() && isInIOSApp() && 
              !window.location.href.includes('pdf_viewer_ios.html') &&
              !document.title.includes('PDF Viewer - Hiper Cards')) {
-           chrome.runtime.sendMessage({ msg: 'loadPDFViewer', pdfUrl: url });
+              chrome.runtime.sendMessage({ msg: 'loadPDFViewer', pdfUrl: url });
            return; // Don't send the regular message
          }
          
-        chrome.runtime.sendMessage({ msg: 'newPageInfoForIosApp', url: window.location.href, pageInfoFromPage: vState.pageInfoFromPage },
-          function (resp) {
-            if (!resp || resp.error) console.warn('Handle Error sending info to background todo ', vState.pageInfoFromPage, resp)
-            // onsole.log('do nothing ...')
+        sendPageInfoToIos('initial_100ms')
+        
+        // Some sites hydrate metadata late; retry when title is still low quality.
+        setTimeout(function () {
+          if (shouldRetryLowQualityTitle()) {
+            console.log('[vulog][metadata-retry] retrying page metadata at 1200ms')
+            sendPageInfoToIos('retry_1200ms')
           }
-        )
+        }, 1200)
+        setTimeout(function () {
+          if (shouldRetryLowQualityTitle()) {
+            console.log('[vulog][metadata-retry] retrying page metadata at 3000ms')
+            sendPageInfoToIos('retry_3000ms')
+          }
+        }, 3000)
       }, 100)
       setTimeout(function () { 
         // if (!vState.showThis) vState.showThis = 'ownMark' // 202507 nt sure why this was here

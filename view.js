@@ -24,7 +24,7 @@ const vState = {
   queryPage: 0,
   querySkip: 0,
   markOnBackEnd: async function (mark, options, theStar, starWasChosen, addDefaultHashTag) {
-    const isNewMark = (!mark)
+    const isNewMark = (!mark || !mark._id) // could be alfready converted from log (convertLogToMark)
     if (isNewMark && options.logToConvert) {
       mark = convertLogToMark(options.logToConvert)
     }
@@ -37,13 +37,14 @@ const vState = {
       }
       let result
       if (!isNewMark) {
-        const markPartsCopy = {
-          _id: mark._id,
-          vStars: mark.vStars
-        }
-        result = await freepr.feps.update(markPartsCopy, { app_table: 'cards.hiper.freezr.marks', replaceAllFields: false })
+        // const markPartsCopy = {
+        //   _id: mark._id,
+        //   vStars: mark.vStars
+        // }
+        result = await freezr.update('cards.hiper.freezr.marks', mark._id, { vStars: mark.vStars}, { replaceAllFields: false })
       } else { // isNewMark
-        result = await freepr.feps.create(mark, { app_table: 'cards.hiper.freezr.marks' })
+        // create(collectionOrAppTable, data, options = {})
+        result = await freezr.create('cards.hiper.freezr.marks', mark)
       }
       if (result && !result.success && !result.error) {
         result.success = true
@@ -55,7 +56,8 @@ const vState = {
       const markPartsCopy = {}
       KEYSTOSTAY.forEach((key) => { markPartsCopy[key] = mark[key] })
       markPartsCopy.fj_deleted = true
-      const result = await freepr.feps.update(markPartsCopy, { app_table: 'cards.hiper.freezr.marks', replaceAllFields: true })
+      const result = await freezr.update('cards.hiper.freezr.marks', markPartsCopy._id, markPartsCopy, { replaceAllFields: true })
+            // update(collectionOrAppTable, id, data, options = {}) 
       if (result && !result.success && !result.error) result.success = true
       if (result.success) {
         const cardDiv = document.getElementById('vitem_id_' + mark._id)
@@ -73,7 +75,7 @@ const vState = {
     return vState.saveWithInterValer()
   },
   markMsgAsRead: async function (unreadMsgIds) {
-    return await freepr.feps.markMessagesRead(unreadMsgIds, null)
+    return await freezr.messages.markRead(unreadMsgIds, null)
   },
   hLightCommentSaver: async function (hLight, text, options) { // options: purl, mark, noteSaver
     if (!hLight || !text || (!options.purl && !options.mark)) return { error: true, msg: 'need comment text to process' }
@@ -94,7 +96,7 @@ const vState = {
     if (!foundHlight) return { error: true, msg: 'no hlight found' }
 
     const toChange = { _id: mark._id, vHighlights: mark.vHighlights, vSearchString: resetVulogKeyWords(mark) }
-    const result = await freepr.feps.update(toChange, { app_table: 'cards.hiper.freezr.marks', replaceAllFields: false })
+    const result = await freezr.update('cards.hiper.freezr.marks', mark._id, toChange, { replaceAllFields: false })
     await vState.asyncMarksAndUpdateVstate()
     if (!result || result.error) {
       return { success: false, error: result?.error }
@@ -134,7 +136,7 @@ const vState = {
         } else {
           const vSearchString = resetVulogKeyWords(markOnVstate)
           const markPartsCopy = { _id, vNote, vSearchString }
-          const result = await freepr.feps.update(markPartsCopy, { app_table: 'cards.hiper.freezr.marks', replaceAllFields: false })
+          const result = await freezr.update('cards.hiper.freezr.marks', _id, markPartsCopy, { replaceAllFields: false })
           if (!result || result.error) errors.push({ _id, result })
         }
       }
@@ -174,9 +176,8 @@ const vState = {
       q = convertListerParamsToDbQuery(params.queryParams, q)
     }
     try {
-      const newItems = await freepr.feps.postquery({
-        app_table: apptable, q, count: getCount
-      })
+      // onsole.log('environmentSpecificGetOlderItems', { apptable, q, count: getCount })
+      const newItems = await freezr.query(apptable, q, { count: getCount })
 
       newItems.sort(sortBycreatedDate).reverse()
       return { success: true, newItems, typeReturned }
@@ -186,14 +187,11 @@ const vState = {
     }
   },
   environmentSpecificGetMark: async function (purl) {
-    const marksFromServer = await freepr.feps.postquery({
-      app_table: 'cards.hiper.freezr.marks',
-      q: { fj_deleted: { $ne: true }, purl }
-    })
+    const marksFromServer = await freezr.query('cards.hiper.freezr.marks', { fj_deleted: { $ne: true }, purl })
     const mark = (marksFromServer && marksFromServer.length > 0) ? marksFromServer[0] : null
 
     try {
-      const q = { fj_deleted: { $ne: true }, app_id: 'cards.hyper.freezr', 'record.purl': purl }
+      const q = { fj_deleted: { $ne: true }, app_id: 'cards.hiper.freezr', 'record.purl': purl }
       const sentMsgs = await freepr.feps.postquery({ app_table: appTableFromList('sentMsgs'), q })
       const gotMsgs = await freepr.feps.postquery({ app_table: appTableFromList('gotMsgs'), q })
       const messages = [...gotMsgs, ...sentMsgs]
@@ -206,19 +204,16 @@ const vState = {
     }
   },
   environmentSpecificGetHistoryItem: async function (purl) {
-    const logsFromServer = await freepr.feps.postquery({
-      app_table: 'cards.hiper.freezr.logs',
-      q: { fj_deleted: { $ne: true }, purl }
-    })
+    const logsFromServer = await freezr.query('cards.hiper.freezr.logs', { fj_deleted: { $ne: true }, purl })
     const log = (logsFromServer && logsFromServer.length > 0) ? logsFromServer[0] : null
 
     return { log }
   },
   asyncMarksAndUpdateVstate: async function () {
+    console.log('asyncMarksAndUpdateVstate')
     const q = { fj_deleted: { $ne: true }, _date_modified: { $gt: vState.marks.newestItem } }
-    const newItems = await freepr.feps.postquery({
-      app_table: 'cards.hiper.freezr.marks', q
-    })
+    console.log('asyncMarksAndUpdateVstate - q', { q })
+    const newItems = await freezr.query('cards.hiper.freezr.marks', q)
 
     if (newItems && newItems.length > 0) {
       newItems.forEach(item => {
@@ -260,7 +255,7 @@ const vState = {
       if (!chosenFriends || chosenFriends.length === 0) throw new Error('No friends chosen')
       if (!markCopy) throw new Error('mark copy could not be found', markCopy?.purl)
       markCopy.vComments = []
-      const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
+      const createRet = await freezr.create('cards.hiper.freezr.sharedmarks', markCopy)
       if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
       markCopy._id = createRet._id
     } catch (error) {
@@ -302,7 +297,7 @@ const vState = {
     msgToSend.recipients = recipients
 
     try {
-      const sendRet = await freepr.ceps.sendMessage(msgToSend)
+      const sendRet = await freezr.messages.send(msgToSend)
       if (!sendRet || sendRet.error) throw new Error('Error sending message: ' + (sendRet?.error || 'unknown'))
       return ({ successFullSends: sendRet.recipientsSuccessfullysentTo, erroredSends: sendRet.recipientsWithErrorsSending })
     } catch (e) {
@@ -336,10 +331,12 @@ const vState = {
 }
 
 freezr.initPageScripts = function () {
+  console.log('initPageScripts')
   setTimeout(initState, 0)
 }
 
 const initState = async function () {
+  console.log('initState')
   vState.divs = {}
   vState.divs.main = dg.el('vulogRecords')
   vState.divs.spinner = dg.el('spinner')
@@ -356,14 +353,14 @@ const initState = async function () {
 
   vState.freezrMeta = freezrMeta || {}
   vState.freezrMeta.perms = {}
-  const permsList = await freepr.perms.getAppPermissions()
+  const permsList = await freezr.perms.getAppPermissions()
   permsList.forEach(perm => {
     vState.freezrMeta.perms[perm.name] = perm
   })
 
   try {
-    vState.friends = vState.freezrMeta?.perms?.friends?.granted ? await freepr.feps.postquery({ app_table: 'dev.ceps.contacts', permission_name: 'friends' }) : []
-    vState.groups = vState.freezrMeta?.perms?.groups?.granted ? await freepr.feps.postquery({ app_table: 'dev.ceps.groups', permission_name: 'groups' }) : []
+    vState.friends = vState.freezrMeta?.perms?.friends?.granted ? await freezr.query('dev.ceps.contacts', {}, { permission_name: 'friends' }) : []
+    vState.groups = vState.freezrMeta?.perms?.groups?.granted ? await freezr.query('dev.ceps.groups', {}, { permission_name: 'groups' }) : []
   } catch (e) {
     console.error('error in getting contacts at initstate', e)
   }
@@ -384,30 +381,30 @@ const initState = async function () {
   document.body.style['overflow-x'] = 'hidden'
 
   await setUpDivsAndDrawItems()
-  try {
-    if (vState.freezrMeta?.perms?.privateCodes?.granted) {
-      const accessRet = await freepr.perms.validateDataOwner(
-        {
-          data_owner_user: 'public',
-          table_id: 'dev.ceps.privatefeeds.codes',
-          permission: 'privateCodes'
-        })
+  // try {
+  //   if (vState.freezrMeta?.perms?.privateCodes?.granted) {
+  //     const accessRet = await freepr.perms.validateDataOwner(
+  //       {
+  //         data_owner_user: 'public',
+  //         table_id: 'dev.ceps.privatefeeds.codes',
+  //         permission: 'privateCodes'
+  //       })
 
-      // options - data_owner_user table_id permission
-      vState.feedcodes = await freepr.feps.postquery({
-        // app_table: 'dev.ceps.privatefeeds.codes',
-        appToken: accessRet['access-token'],
-        requestor_user: vState.freezrMeta?.userId,
-        permission_name: 'privateCodes',
-        data_owner_user: 'public',
-        app_table: 'dev.ceps.privatefeeds.codes',
-        permission: 'privateCodes',
-        app_id: 'cards.hiper.freezr'
-      })
-    }
-  } catch (e) {
-    console.error('error in getting feedcodes at initstate', e)
-  }
+  //     // options - data_owner_user table_id permission
+  //     vState.feedcodes = await freepr.feps.postquery({
+  //       // app_table: 'dev.ceps.privatefeeds.codes',
+  //       appToken: accessRet['access-token'],
+  //       requestor_user: vState.freezrMeta?.userId,
+  //       permission_name: 'privateCodes',
+  //       data_owner_user: 'public',
+  //       app_table: 'dev.ceps.privatefeeds.codes',
+  //       permission: 'privateCodes',
+  //       app_id: 'cards.hiper.freezr'
+  //     })
+  //   }
+  // } catch (e) {
+  //   console.error('error in getting feedcodes at initstate', e)
+  // }
 }
 
 const clickers = async function (evt) {

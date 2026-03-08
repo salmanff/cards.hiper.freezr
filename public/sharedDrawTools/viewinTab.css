@@ -10,7 +10,7 @@ body {
 #viewInTabWindow {
   padding: 10px;
   padding-top: 0;
-  background-color: #057d47;
+  background-color: #0a5c20;
   min-height: 1000px;
 }
 #topBar {
@@ -27,7 +27,7 @@ body {
   font-weight: bold;
   font-size: 14px;
   margin-right: 20px;
-  color:#057d47;
+  color:#0a5c20;
 }
 .tmClosed{
   font-weight: normal;

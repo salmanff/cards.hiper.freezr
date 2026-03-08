@@ -11,7 +11,7 @@
 /* global sortByModifedDate, appTableFromList, convertListerParamsToDbQuery */ // from utils.js
 /* global smallSpinner */ // from drawUtils.js
 /* global Calendar */ // from datepicker.js
-// "initial_data": { "url": "/v1/pdbq/cards.hiper.freezr" }
+// "initial_data": { "url": "/public/query/cards.hiper.freezr" }
 const vState = {
   isLoggedIn: true,
   loadState: {
@@ -73,18 +73,19 @@ const vState = {
       q = convertListerParamsToDbQuery(params.queryParams, q)
     }
     try {
-      const data = { q, app_name: 'cards.hiper.freezr' }
-      if (window.location.href.indexOf('/papp/@') > 0) {
+      const data = { q }
+      data.q.app = 'cards.hiper.freezr'
+      if (window.location.href.indexOf('/public/app/@') > 0) {
         if (vState.queryParams.dataOwner !== 'public') {
-          data.data_owner = vState.queryParams.dataOwner || vState.publicUser.slice(1)
+          data.q.data_owner = vState.queryParams.dataOwner || vState.publicUser.slice(1)
         }
         if (vState.queryParams.feed) {
           data.feed = vState.queryParams.feed
           data.code = vState.queryParams.feedcode
         }
       }
-      // onsole.log('data', data)
-      const response = await fetch('/v1/pdbq', {
+
+      const response = await fetch('/public/query', {
         method: 'POST',
         credentials: 'omit', // include, *same-origin, omit
         headers: {
@@ -276,7 +277,7 @@ const initState = async function () {
 
   vState.freezrMeta = freezrMeta || {}
 
-  vState.publicUser = window.location.pathname.slice((window.location.pathname.indexOf('/papp/') + '/papp/'.length), window.location.pathname.indexOf('/cards.hiper.freezr') )
+  vState.publicUser = window.location.pathname.slice((window.location.pathname.indexOf('/public/app/') + '/public/app/'.length), window.location.pathname.indexOf('/cards.hiper.freezr') )
 
   vState.queryParams = lister.getUrlParams()
   // list, words, starFilters, notStarfilters, startDate, endDate
@@ -284,7 +285,7 @@ const initState = async function () {
   const dataOwner = vState.queryParams.dataOwner || vState.publicUser.slice(1)
 
   dg.el('top_logo').onerror = function () {
-    // onsole.log('didnt get image ' + '/publicfiles/@' + vState.publicUser + '/info.freezr.account/profilePict.jpg')
+    // onsole.log('didnt get image ' + '/@' + vState.publicUser + '/info.freezr.account.files/profilePict.jpg')
     // dg.el('top_logo').src = '/app_files/' + vState.publicUser + '/cards.hiper.freezr/public/static/logo.png'
     // dg.el('top_logo').onerror = null
   }

@@ -3,11 +3,13 @@
 // Compare iosApp vs ChromeExtension - verified 2022-07-05
  
 /* exported VuPageData */
-/* global pureUrlify, resetVulogKeyWords, domainAppFromUrl, startsWith, endsWith, hostFromUrl */
+/* global pureUrlify, resetVulogKeyWords, domainAppFromUrl, startsWith, endsWith, hostFromUrl, vulogIsFromIos */
 
 function VuPageData (options) {
-  if (!options) options = { ignoreNonStandard: true, ignoreCookies: false }
-  this.props = getAllPageTags(options)
+  const isFromIos = (typeof vulogIsFromIos !== 'undefined' && vulogIsFromIos === true)
+  const defaultOptions = { ignoreNonStandard: true, ignoreCookies: false, isFromIos }
+  const finalOptions = Object.assign({}, defaultOptions, (options || {}))
+  this.props = getAllPageTags(finalOptions)
 }
 
 const getAllPageTags = function (options) {
@@ -20,13 +22,15 @@ const getAllPageTags = function (options) {
     referrer: document.referrer,
     vCreated: new Date().getTime()
   }
-  if (document.getElementsByTagName('title') && document.getElementsByTagName('title')[0]) parsedTags.title = document.getElementsByTagName('title')[0].innerText
+  const docTitle = getDocumentTitle()
+  if (docTitle) parsedTags.title = docTitle
 
   if (haveBody()) {
     const allMetas = document.getElementsByTagName('meta')
     parsedTags = addMetaTotags(parsedTags, allMetas, options)
     parsedTags.vuLog_height = document.getElementsByTagName('BODY')[0].scrollHeight
   }
+  parsedTags = applyXTitleAndImageFallbacksForIos(parsedTags, options)
 
   if (!options.ignoreCookies) {
     try {
@@ -40,6 +44,114 @@ const getAllPageTags = function (options) {
     parsedTags.vulog_3rdParties = { js: vulog3pjs, img: vulog3pimg }
   }
 
+  return parsedTags
+}
+const getDocumentTitle = function () {
+  if (document.getElementsByTagName('title') && document.getElementsByTagName('title')[0]) {
+    return document.getElementsByTagName('title')[0].innerText
+  }
+  return ''
+}
+const normalizeTitle = function (title) {
+  return (title || '').trim()
+}
+const isLowQualityTitle = function (title) {
+  const normalized = normalizeTitle(title)
+  if (normalized.length <= 10 || normalized.toLowerCase() === 'x') return true
+  if (normalized.startsWith('http://') || normalized.startsWith('https://')) return true
+  return false
+}
+const hostFromWindowLocation = function () {
+  try {
+    return new URL(window.location.href).host.toLowerCase()
+  } catch (e) {
+    return ''
+  }
+}
+const isXHost = function () {
+  const host = hostFromWindowLocation()
+  return (host === 'x.com' || host.endsWith('.x.com') || 
+      host === 'twitter.com' || host.endsWith('.twitter.com') || 
+      host === 'instagram.com' || host.endsWith('.instagram.com'))
+}
+const isXStatusUrl = function () {
+  if (!isXHost()) return false
+  return /\/[^/]+\/status\/\d+/.test(window.location.pathname || '')
+}
+const getMetaContent = function (key) {
+  const byName = document.querySelector('meta[name="' + key + '"]')
+  if (byName && byName.content) return byName.content
+  const byProperty = document.querySelector('meta[property="' + key + '"]')
+  if (byProperty && byProperty.content) return byProperty.content
+  return ''
+}
+const getTweetTextFallback = function () {
+  const tweetTextContainer = document.querySelector('[data-testid="tweetText"]')
+  if (tweetTextContainer && tweetTextContainer.textContent) {
+    return tweetTextContainer.textContent.trim()
+  }
+  return ''
+}
+const normalizeXProfileImageUrl = function (imageUrl) {
+  if (!imageUrl) return ''
+  return imageUrl
+    .replace('_normal.', '_400x400.')
+    .replace('_bigger.', '_400x400.')
+}
+const getXProfileImageFallback = function () {
+  let statusUser = ''
+  if (isXStatusUrl()) {
+    const pathParts = (window.location.pathname || '').split('/').filter(Boolean)
+    statusUser = pathParts[0] || ''
+  }
+  if (statusUser) {
+    const articles = document.querySelectorAll('article')
+    for (let i = 0; i < articles.length; i++) {
+      const article = articles[i]
+      const authorLink = article.querySelector('a[href="/' + statusUser + '"]')
+      const avatarImg = article.querySelector('[data-testid="Tweet-User-Avatar"] img[src*="pbs.twimg.com/profile_images/"]')
+      if (authorLink && avatarImg && avatarImg.src) {
+        return normalizeXProfileImageUrl(avatarImg.src)
+      }
+    }
+  }
+  const selectors = [
+    'article [data-testid="Tweet-User-Avatar"] img[src*="pbs.twimg.com/profile_images/"]',
+    'div[data-testid="Tweet-User-Avatar"] img[src*="pbs.twimg.com/profile_images/"]',
+    'img[src*="pbs.twimg.com/profile_images/"]'
+  ]
+  for (let i = 0; i < selectors.length; i++) {
+    const img = document.querySelector(selectors[i])
+    if (img && img.src) return normalizeXProfileImageUrl(img.src)
+  }
+  return ''
+}
+const chooseBestTitle = function (titleCandidates) {
+  for (let i = 0; i < titleCandidates.length; i++) {
+    const candidate = normalizeTitle(titleCandidates[i])
+    if (candidate && !isLowQualityTitle(candidate)) return candidate
+  }
+  for (let i = 0; i < titleCandidates.length; i++) {
+    const candidate = normalizeTitle(titleCandidates[i])
+    if (candidate) return candidate
+  }
+  return ''
+}
+const applyXTitleAndImageFallbacksForIos = function (parsedTags, options) {
+  if (!options || !options.isFromIos) return parsedTags
+  if (!isXHost()) return parsedTags
+
+  const docTitle = getDocumentTitle()
+  const ogTitle = getMetaContent('og:title')
+  const twitterTitle = getMetaContent('twitter:title')
+  const tweetText = isXStatusUrl() ? getTweetTextFallback() : ''
+  const currentTitle = parsedTags.title || ''
+  const chosenTitle = chooseBestTitle([currentTitle, ogTitle, twitterTitle, tweetText])
+  const currentImage = parsedTags.image || ''
+  const avatarImage = isXStatusUrl() ? getXProfileImageFallback() : ''
+  const chosenImage = (!currentImage || !currentImage.includes('profile_images/')) ? avatarImage : currentImage
+  if (chosenTitle) parsedTags.title = chosenTitle
+  if (chosenImage) parsedTags.image = chosenImage
   return parsedTags
 }
 const EQUIV_NAMES = {

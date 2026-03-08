@@ -398,7 +398,10 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
           border: '1px solid white',
           'border-radius': '5px',
           margin: '3px 5px 3px 10px',
-          padding: '3px'
+          padding: '3px',
+          transition: 'all 0.5s ease-out',
+          transform: 'rotateY(90deg)',
+          display: 'inline-flex'  // so width collapses when rotated edge-on
         }
       })
       inner.setAttribute('root', root)
@@ -406,7 +409,6 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
         const theLogDiv = lister.drawlogItem(logItem, { tabtype: list })
         if (theLogDiv) {
           inner.appendChild(theLogDiv)
-          // outer.insertBefore(theLogDiv, moreDiv)
           if (index < fullList.length - 1) theLogDiv.setAttribute('vCollapsible', false)
         }
       })
@@ -415,6 +417,8 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
       } else {
         outer.insertBefore(inner, outer.firstChild)
       }
+      // animate in on next frame
+      requestAnimationFrame(() => { inner.style.transform = 'rotateY(0deg)' })
     }
 
     // 3 - slip in existing roots oldRootsWithNewItems
@@ -503,7 +507,7 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
       mainDiv.appendChild(titleDiv)
       for (const [windowId, tabObjects] of Object.entries(windowType)) {
         const isIncognito = incognitoWindowIds.indexOf(parseInt(windowId)) > -1
-        const windowOuter = dg.div({ style: { padding: '0px', 'border-radius': '20px', background: 'rgb(10 150 100)', margin: '10px', border: '1px solid white' } })
+        const windowOuter = dg.div({ style: { padding: '0px', 'border-radius': '20px', background: '#245fa3', margin: '10px', border: '1px solid white', transition: 'all 0.5s ease-out', transform: 'rotateY(90deg)' } })
         if (typeCounter > 1) windowOuter.style.display = 'none'
         const windowTitle = dg.h3({ style: { padding: '0px 0px 0px 20px', color: (isIncognito ? 'black' : 'white') } }, (typeCounter === 1 ? '' : 'Closed ') + (isIncognito ? ' Incognito ' : '') + 'Window ' + ++windowCounter)
         windowOuter.append(windowTitle)
@@ -537,7 +541,6 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
               theLogDiv.firstChild.style.background = (isCurrentOpenCard ? 'white' : 'lightgrey')
               if (i < tabObject.tabHistory.length - 1) {
                 theLogDiv.setAttribute('vCollapsible', true)
-                // theLogDiv.firstChild.style.transform = 'rotateY(90deg)'
               }
               tabDiv.appendChild(theLogDiv)
             } else { /* tab is already drawn */ }
@@ -644,6 +647,7 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
 
         // use openerTabId as a way of finding referrer!
         mainDiv.appendChild(windowOuter)
+        requestAnimationFrame(() => { windowOuter.style.transform = 'rotateY(0deg)' })
       }
     }
   // )
@@ -666,7 +670,7 @@ const tabRecordByPurl = function (purl) {
 }
 const drawBoxAroundTabCards = function (cardDiv) {
   cardDiv.parentElement.parentElement.parentElement.style.border = '2px solid white'
-  cardDiv.parentElement.parentElement.parentElement.style.background = 'rgb(10, 120, 70)' // 'rgb(121, 172, 18)'
+  cardDiv.parentElement.parentElement.parentElement.style.background = '#163868'
   cardDiv.parentElement.parentElement.parentElement.style['border-radius'] = '15px'
   cardDiv.parentElement.parentElement.parentElement.style['min-height'] = '140px'
 }
@@ -689,7 +693,7 @@ lister.dims = {
   },
   messages: {
     width: 200,
-    height: 360
+    height: 330
   },
   publicmarks: {
     width: '100%',
@@ -706,19 +710,47 @@ lister.drawmarkItem = function (markOnMark, opt = {}) {
   if (tabtype) itemdiv.setAttribute('tabtype', tabtype)
   itemdiv.setAttribute('purl', markOnMark.purl)
   itemdiv.className = 'cardOuter'
+  if (!expandedView) {
+    itemdiv.style.display = 'flex'
+    itemdiv.style['flex-direction'] = 'column'
+    itemdiv.style.position = 'relative'
+  }
 
   const minMax = lister.minMaximizeButt(lister.idFromMark(markOnMark))
   lister.minMaximizeButtSet(minMax, true)
+  if (!expandedView) {
+    minMax.style.position = 'absolute'
+    minMax.style.top = '6px'
+    minMax.style.right = '6px'
+    minMax.style.float = 'none'
+    minMax.style['z-index'] = '2'
+  }
   itemdiv.appendChild(minMax)
 
-  itemdiv.appendChild(lister.domainSpanWIthRef(markOnMark, expandedView))
+  const domainOuter = lister.domainSpanWIthRef(markOnMark, expandedView)
+  domainOuter.className = 'cardDomainBar'
+  if (!expandedView) {
+    domainOuter.style['padding-right'] = '24px'
+    domainOuter.style['box-sizing'] = 'border-box'
+    domainOuter.classList.add('vulog-expand-cursor')
+    domainOuter.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark)) }
+  }
+  itemdiv.appendChild(domainOuter)
 
   const titleOuter = lister.titleOuter(expandedView)
+  if (!expandedView) {
+    titleOuter.classList.add('vulog-expand-cursor')
+    titleOuter.onclick = async function (e) {
+      if (e.target.tagName !== 'A') await lister.setItemExpandedStatus(lister.idFromMark(markOnMark))
+    }
+  }
   if (!markOnMark.url) console.warn('No url is markOnMark', { markOnMark })
   titleOuter.appendChild(lister.openOutside(markOnMark.url))
 
-  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, lister.createSanitizedTitle(markOnMark))
+  const titleInner = dg.a({ style: lister.smallCardTitleStyles(expandedView) }, lister.createSanitizedTitle(markOnMark))
   titleInner.setAttribute('href', markOnMark.url)
+  titleInner.setAttribute('target', '_blank')
+  titleInner.setAttribute('rel', 'noopener noreferrer')
   titleOuter.appendChild(titleInner)
 
   itemdiv.appendChild(titleOuter)
@@ -728,26 +760,62 @@ lister.drawmarkItem = function (markOnMark, opt = {}) {
     trashFloatHide: true,
     markOnBackEnd: vState.markOnBackEnd
   })
-  itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center' } }, stars))
+  if (!expandedView) {
+    stars.style.transform = 'scale(0.86)'
+    stars.style['transform-origin'] = 'top center'
+  }
+  itemdiv.appendChild(dg.div({
+    className: 'starsOnCard',
+    style: { 'text-align': 'center', 'margin-top': (!expandedView ? '8px' : '0'), 'margin-bottom': (!expandedView ? '4px' : '0') }
+  }, stars))
 
-  itemdiv.appendChild(lister.imageBox(markOnMark.image, null, titleInner))
+  const mediaBlock = lister.drawSmallCardMediaBlock(markOnMark, expandedView, titleInner)
+  if (mediaBlock) itemdiv.appendChild(mediaBlock)
 
-  const summaryOuter = dg.div({ className: 'summarySharingAndHighlights' })
-  summaryOuter.appendChild(lister.summarySharingAndHighlights(markOnMark))
+  const summaryOuter = dg.div({
+    className: 'summarySharingAndHighlights',
+    style: { display: 'none' }
+  })
+  summaryOuter.setAttribute('data-display', !expandedView ? 'none' : 'grid')
+  summaryOuter.appendChild(lister.summarySharingAndHighlights(markOnMark, { compact: !expandedView }))
   itemdiv.appendChild(summaryOuter)
 
+  let preNotesSpacer = null
+  if (!expandedView) {
+    preNotesSpacer = dg.div({
+      className: 'smallCardPreNotesSpacer',
+      style: { flex: '1 1 auto', 'min-height': '0' }
+    })
+    itemdiv.appendChild(preNotesSpacer)
+  }
+
   const notesBox = overlayUtils.drawMainNotesBox(markOnMark, { mainNoteSaver: vState.mainNoteSaver })
-  notesBox.style.margin = '0px 0px 5px 0px'
-  notesBox.style['max-height'] = '40px'
-  notesBox.style.height = '40px'
-  notesBox.style['overflow-y'] = 'auto'
+  // let postNotesSpacer = null
+  // if (!expandedView) {
+  //   postNotesSpacer = dg.div({
+  //     className: 'smallCardBottomSpacer',
+  //     style: { flex: '1 1 auto', 'min-height': '0' }
+  //   })
+  // }
+  lister.styleCardNotesBox(notesBox, markOnMark, expandedView)
+  // lister.styleCardNotesBox(notesBox, markOnMark, expandedView, { preNotesSpacer, postNotesSpacer })
   itemdiv.appendChild(notesBox)
+  // if (!expandedView && postNotesSpacer) itemdiv.appendChild(postNotesSpacer)
+  if (!expandedView) {
+    postNotesSpacer = dg.div({
+      className: 'smallCardBottomSpacer',
+      style: { flex: '1 1 auto', 'min-height': '0' }
+    })
+    itemdiv.appendChild(postNotesSpacer)
+  }
 
   const modifiedDate = new Date(markOnMark._date_modified || markOnMark.fj_modified_locally)
   const createdDate = new Date(markOnMark.vCreated || markOnMark._date_created)
-  let dateString = 'Created: ' + (overlayUtils.smartDate(createdDate))
-  if (modifiedDate - createdDate > 1000 * 60 * 60 * 24) dateString += ' Modified: ' + (modifiedDate.toLocaleDateString())
-  itemdiv.appendChild(dg.div({ style: { color: 'indianred' } }, dateString))
+  const dateString = lister.smallCardDateString(createdDate, modifiedDate, expandedView)
+  itemdiv.appendChild(dg.div({
+    className: 'dateString',
+    style: lister.smallCardDateStyles(expandedView)
+  }, dateString))
 
   const hLightOptions = {
     type: 'markHighlights',
@@ -772,13 +840,16 @@ lister.drawmarkItem = function (markOnMark, opt = {}) {
 
   return lister.addCard2ndOuter(itemdiv, 'marks')
 }
-lister.summarySharingAndHighlights = function (markOnMark) {
+lister.summarySharingAndHighlights = function (markOnMark, options = {}) {
+  const compact = Boolean(options?.compact)
+  if (compact) return lister.compactSummaryChips(markOnMark, options)
+
   const hasHighlights = (markOnMark.vHighlights && markOnMark.vHighlights.length > 0)
   const summarySharingAndHighlights = dg.div({
     style: { display: 'grid', 'grid-template-columns': (hasHighlights ? '1fr 1fr' : '1fr'), cursor: 'pointer', padding: '2px' }
   })
   if (markOnMark.vHighlights && markOnMark.vHighlights.length > 0) {
-    const highlightSum = dg.div({ style: { overflow: 'hidden', color: '#057d47', 'padding-top': '3px' } },
+    const highlightSum = dg.div({ style: { overflow: 'hidden', color: '#0a5c20', 'padding-top': '3px' } },
       dg.div((markOnMark.vHighlights.length + ' highlights'),
         dg.div({ style: { overflow: 'hidden', 'text-overflow': 'ellipsis', height: '18px', 'margin-bottom': '-5px' } }, 'Click to see')))
     highlightSum.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark)) }
@@ -793,6 +864,292 @@ lister.summarySharingAndHighlights = function (markOnMark) {
   sharingButt.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(markOnMark)) }
   summarySharingAndHighlights.appendChild(sharingButt)
   return summarySharingAndHighlights
+}
+lister.compactSummaryChips = function (markOnMark, options = {}) {
+  const summary = dg.div({
+    style: {
+      display: 'flex',
+      gap: '6px',
+      'align-items': 'center',
+      'flex-wrap': 'wrap',
+      overflow: 'hidden'
+    }
+  })
+  const indicators = lister.smallCardIndicators(markOnMark)
+  if (indicators.length === 0) {
+    summary.style.display = 'none'
+    return summary
+  }
+  indicators.forEach(indicator => summary.appendChild(lister.smallCardIndicator(markOnMark, indicator)))
+  return summary
+}
+lister.smallCardIndicators = function (markOnMark, options = {}) {
+  const msgCount = markOnMark?.vComments?.length || 0
+  const hlCount = markOnMark?.vHighlights?.length || 0
+
+  // Optional main-note preview pill (used by message cards only)
+  const notePreviewSource = options?.notePreviewSource || markOnMark
+  const previewText = options?.showNotePreview ? (notePreviewSource?.vNote?.trim()?.slice(0, 22) || null) : null
+
+  // Fixed 3-slot layout (null = blank spacer): messages, highlights, preview
+  return [
+    msgCount > 0 ? { icon: 'fa-comment-o', text: msgCount + '', color: '#6f49d8', borderColor: '#d4c6f7', bgColor: '#f3f0fd' } : null,
+    hlCount > 0 ? { icon: 'fa-quote-left', text: hlCount + '', color: '#1fa86a', borderColor: '#b3ecd6', bgColor: '#edfdf6' } : null,
+    previewText ? { preview: true, text: previewText } : null
+  ]
+}
+lister.smallCardIndicator = function (markOnMark, indicator) {
+  // null = blank spacer to hold the slot position
+  if (!indicator) return dg.div({ style: { height: '18px', visibility: 'hidden', 'pointer-events': 'none' } })
+  const expand = async function (e) {
+    e.preventDefault()
+    e.stopPropagation()
+    await lister.setItemExpandedStatus(lister.idFromMark(markOnMark))
+  }
+  if (indicator.preview) {
+    const previewPill = dg.div({
+      title: 'Click to expand card',
+      onclick: expand,
+      style: {
+        display: 'inline-flex',
+        'align-items': 'center',
+        'font-size': '10px',
+        color: '#6a7f97',
+        border: '1px solid #d5deea',
+        'border-radius': '999px',
+        padding: '1px 8px',
+        'line-height': '14px',
+        'background-color': '#f3f7fb',
+        overflow: 'hidden',
+        'text-overflow': 'ellipsis',
+        'white-space': 'nowrap',
+        'max-width': '120px'
+      }
+    }, dg.span({}, indicator.text + '\u2026'))
+    previewPill.classList.add('vulog-expand-cursor')
+    return previewPill
+  }
+  const pill = dg.div({
+    title: 'Click to expand card',
+    onclick: expand,
+    style: {
+      display: 'inline-flex',
+      'align-items': 'center',
+      gap: '4px',
+      'font-size': '11px',
+      color: indicator.color || '#4d5c70',
+      border: '1px solid ' + (indicator.borderColor || '#d5deea'),
+      'border-radius': '999px',
+      padding: '1px 7px',
+      'line-height': '14px',
+      'background-color': indicator.bgColor || '#f3f7fb',
+      overflow: 'hidden',
+      'text-overflow': 'ellipsis',
+      'white-space': 'nowrap',
+      'max-width': '64px'
+    }
+  },
+  dg.span({ className: 'fa ' + indicator.icon, style: { 'font-size': '10px', color: indicator.color || '#6a7f97' } }),
+  dg.span({ style: { 'font-weight': 'bold', 'min-width': '8px', 'text-align': 'center' } }, indicator.text)
+  )
+  pill.classList.add('vulog-expand-cursor')
+  return pill
+}
+// Pill-style action badge for left overlay (bookmark / star / inbox)
+lister.drawMsgActionPill = function (faIcon, active, activeColor) {
+  return dg.div({
+    style: {
+      display: 'flex',
+      'align-items': 'center',
+      'justify-content': 'center',
+      width: '24px',
+      height: '24px',
+      color: active ? activeColor : '#aaa',
+      opacity: active ? '1' : '0.25',
+      'pointer-events': 'none',
+      'flex-shrink': '0'
+    }
+  }, dg.span({ className: 'fa ' + faIcon, style: { 'font-size': '15px' } }))
+}
+lister.drawMsgActionPills = function (mark) {
+  const isBookmarked = Boolean(mark)
+  const isStarred = mark?.vStars?.includes('star')
+  const isInbox = mark?.vStars?.includes('inbox')
+  return dg.div({
+    style: {
+      display: 'flex',
+      'flex-direction': 'column',
+      'justify-content': 'space-evenly',
+      'align-items': 'flex-start',
+      height: '100%',
+      gap: '3px'
+    }
+  },
+    lister.drawMsgActionPill('fa-bookmark', isBookmarked, '#0a5c20'),
+    lister.drawMsgActionPill('fa-star', isStarred, '#e6b800'),
+    lister.drawMsgActionPill('fa-inbox', isInbox, '#1a6fcd')
+  )
+}
+lister.drawSmallCardMediaBlock = function (markOnMark, expandedView, titleInner, options = {}) {
+  const mediaHeight = options.mediaHeight || '106px'
+  const imageStyles = lister.smallCardImageStyles(expandedView, { maxHeight: mediaHeight })
+  const imageBox = lister.imageBox(markOnMark.image, imageStyles, titleInner)
+  const indicators = lister.smallCardIndicators(markOnMark, options)
+  if (expandedView) return imageBox
+  const mediaOuter = dg.div({
+    style: {
+      position: 'relative',
+      margin: '7px 0 4px 0',
+      height: mediaHeight
+    }
+  })
+  mediaOuter.classList.add('vulog-expand-cursor')
+  mediaOuter.onclick = async function (e) {
+    await lister.setItemExpandedStatus(lister.idFromMark(markOnMark))
+  }
+  if (imageBox) {
+    mediaOuter.appendChild(imageBox)
+  } else {
+    mediaOuter.appendChild(dg.div({ className: 'cardImageBox', style: { height: mediaHeight, padding: '0', 'background-color': 'transparent' } }))
+  }
+  // left stack: action icons (bookmark/star/inbox) – spans full height, evenly spaced
+  if (options.leftContent) {
+    const leftStack = dg.div({
+      style: {
+        position: 'absolute',
+        top: '4px',
+        bottom: '4px',
+        left: '4px',
+        display: 'flex',
+        'align-items': 'flex-start',
+        'z-index': '2'
+      }
+    })
+    options.leftContent.style.height = '100%'
+    leftStack.appendChild(options.leftContent)
+    mediaOuter.appendChild(leftStack)
+  }
+  // right stack: fixed 3-slot layout (messages / highlights / preview) – always same positions
+  if (indicators.some(i => i !== null)) {
+    const stack = dg.div({
+      className: 'cardIndicatorsStack',
+      style: {
+        position: 'absolute',
+        top: '4px',
+        bottom: '4px',
+        right: '6px',
+        display: 'flex',
+        'flex-direction': 'column',
+        'justify-content': 'space-evenly',
+        'align-items': 'flex-end',
+        'z-index': '2'
+      }
+    })
+    indicators.forEach(indicator => stack.appendChild(lister.smallCardIndicator(markOnMark, indicator)))
+    mediaOuter.appendChild(stack)
+  }
+  return mediaOuter
+}
+lister.styleCardNotesBox = function (notesBox, markOnMark, expandedView) {
+  // onsole.log('styleCardNotesBox', { notesBox, markOnMark, expandedView })
+  if (!notesBox) return
+  if (expandedView) {
+    notesBox.style['min-height'] = '46px'
+    notesBox.style.height = 'auto'
+    notesBox.style['overflow-y'] = 'auto'
+    notesBox.style['border-radius'] = '6px'
+    notesBox.style.border = '1px solid #e0e8f0'
+    notesBox.style['background-color'] = '#f8fbff'
+    notesBox.style.color = '#4f5d6f'
+    notesBox.style['font-size'] = '14px'
+    notesBox.style.padding = '8px 10px'
+    notesBox.style.width = '100%'
+    notesBox.style['box-sizing'] = 'border-box'
+    notesBox.style.height = 'auto'
+    notesBox.style['max-height'] = ''
+    notesBox.style['overflow-y'] = 'auto'
+    notesBox.style.margin = '10px 0px'
+  } else {
+    notesBox.style.margin = '0'
+    notesBox.setAttribute('placeholder', 'Add Notes')
+    notesBox.style['border-radius'] = '6px'
+    notesBox.style.border = '1px solid #e6edf5'
+    notesBox.style['background-color'] = '#fbfdff'
+    notesBox.style.color = '#4f5d6f'
+    notesBox.style['font-size'] = '14px'
+    notesBox.style['line-height'] = '17px'
+    notesBox.style.padding = '4px 6px'
+    notesBox.style['box-sizing'] = 'border-box'
+  }
+
+  const setHeight = function (notesBox, expandedView) {
+    const hasText = Boolean(notesBox.textContent && notesBox.textContent.trim().length > 0)
+    notesBox.style.height = expandedView ? 'auto' : (hasText ? '58px' : '24px')
+    notesBox.style['max-height'] = expandedView ? '' : (hasText ? '58px' : '24px')
+    notesBox.style['overflow-y'] = expandedView ? 'auto' : (hasText ? 'auto' : 'hidden')
+    notesBox.style.margin = expandedView ? '20px 0px' : '0'
+  }
+  setHeight(notesBox, expandedView)
+  if (!expandedView) {
+    notesBox.addEventListener('input', () => setHeight(notesBox, false))
+    notesBox.addEventListener('keyup', () => setHeight(notesBox, false))
+  } else {
+    // Remove event listeners if any were added in non-expandedView mode
+    notesBox.removeEventListener('input', () => setHeight(notesBox, false))
+    notesBox.removeEventListener('keyup', () => setHeight(notesBox, false))
+  }
+}
+lister.smallCardShareCount = function (mark) {
+  if (!mark?._accessible) return 0
+  return Object.keys(mark._accessible).filter(k => mark._accessible[k]).length
+}
+lister.smallCardDateString = function (createdDate, modifiedDate, expandedView) {
+  const fmtDate = function (d) {
+    if (!d || isNaN(d)) return '—'
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + '  ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  if (expandedView) {
+    let dateString = 'Created: ' + fmtDate(createdDate)
+    if (modifiedDate && modifiedDate - createdDate > 1000 * 60) {
+      dateString += '   ·   Modified: ' + fmtDate(modifiedDate)
+    }
+    return dateString
+  }
+  const hasModified = (modifiedDate - createdDate > 1000 * 60 * 60 * 24)
+  const label = hasModified ? 'Updated ' : 'Created '
+  const dateToUse = hasModified ? modifiedDate : createdDate
+  return label + overlayUtils.smartDate(dateToUse)
+}
+lister.smallCardDateStyles = function (expandedView) {
+  if (expandedView) return { color: '#8a9ab0', 'font-size': '11px', 'margin-top': '4px', 'margin-bottom': '2px', 'letter-spacing': '0.01em' }
+  return { color: '#7b8694', 'font-size': '11px', 'margin-top': '2px', 'padding-top': '0' }
+}
+lister.smallCardTitleStyles = function (expandedView) {
+  if (expandedView) return { 'text-decoration': 'none', 'font-size': '15px', 'font-weight': '500', color: '#1a2535', 'line-height': '1.4' }
+  return {
+    overflow: 'hidden',
+    'text-decoration': 'none',
+    display: '-webkit-box',
+    '-webkit-box-orient': 'vertical',
+    '-webkit-line-clamp': 2,
+    'line-height': '17px',
+    'font-size': '14px',
+    color: '#2f3b4a'
+  }
+}
+lister.smallCardImageStyles = function (expandedView, options = {}) {
+  if (expandedView) return null
+  const maxH = options.maxHeight ? (parseInt(options.maxHeight) - 10 + 'px') : null
+  return { height: (maxH || '96px'), 'max-height': (maxH || '96px'), 'max-width': '156px', 'border-radius': '8px', hideIfNoImage: true }
+}
+lister.smallCardSummaryOuterStyles = function () {
+  return {
+    display: 'flex',
+    'justify-content': 'flex-start',
+    'align-items': 'center',
+    'min-height': '0',
+    padding: '2px 0'
+  }
 }
 lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
   const { fromAutoUpdate } = opt
@@ -831,6 +1188,8 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
   const titleOuter = lister.titleOuter(true)
   const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, (markOnMark.title || markOnMark.purl.replace(/\//g, ' ')))
   titleInner.setAttribute('href', markOnMark.url)
+  titleInner.setAttribute('target', '_blank')
+  titleInner.setAttribute('rel', 'noopener noreferrer')
   titleOuter.appendChild(titleInner)
   itemdiv.appendChild(titleOuter)
 
@@ -893,7 +1252,7 @@ lister.drawpublicmarkItem = function (markOnMark, opt = {}) {
   return lister.addCard2ndOuter(itemdiv, 'publicmarks')
 }
 lister.drawlogItem = function (logItem, opt = {}) {
-  if (!logItem || !logItem.purl) return null // dg.div() // ({ style: { 'background-color': 'darkgreen', 'border-radius': '3px', padding: '3px', 'height': '30px', 'width': '30px', color: 'white', 'text-align': 'center' } }, '-?-')
+  if (!logItem || !logItem.purl) return null
   const { tabtype, expandedView, fromAutoUpdate } = opt
   const itemdiv = fromAutoUpdate
     ? dg.div()
@@ -904,41 +1263,78 @@ lister.drawlogItem = function (logItem, opt = {}) {
   if (expandedView) itemdiv.setAttribute('expandedView', (expandedView))
   if (tabtype) itemdiv.setAttribute('tabtype', tabtype)
   itemdiv.className = 'cardOuter'
+  if (!expandedView) {
+    itemdiv.style.display = 'flex'
+    itemdiv.style['flex-direction'] = 'column'
+    itemdiv.style.position = 'relative'
+  }
 
   const minMax = lister.minMaximizeButt(lister.idFromMark(logItem))
   lister.minMaximizeButtSet(minMax, true)
+  if (!expandedView) {
+    minMax.style.position = 'absolute'
+    minMax.style.top = '6px'
+    minMax.style.right = '6px'
+    minMax.style.float = 'none'
+    minMax.style['z-index'] = '2'
+  }
   itemdiv.appendChild(minMax)
 
-  itemdiv.appendChild(lister.domainSpanWIthRef(logItem, expandedView))
+  const domainOuter = lister.domainSpanWIthRef(logItem, expandedView)
+  domainOuter.className = 'cardDomainBar'
+  if (!expandedView) {
+    domainOuter.style['padding-right'] = '24px'
+    domainOuter.style['box-sizing'] = 'border-box'
+    domainOuter.style['flex-shrink'] = '0'
+    domainOuter.classList.add('vulog-expand-cursor')
+    domainOuter.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
+  }
+  itemdiv.appendChild(domainOuter)
 
   if (!logItem.url) console.warn('No url is logItem', { logItem })
   const titleOuter = lister.titleOuter(expandedView)
-  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } })
+  if (!expandedView) {
+    titleOuter.style['flex-shrink'] = '0'
+    titleOuter.classList.add('vulog-expand-cursor')
+    titleOuter.onclick = async function (e) {
+      if (e.target.tagName !== 'A') await lister.setItemExpandedStatus(lister.idFromMark(logItem))
+    }
+  }
+  const titleInner = dg.a({ style: lister.smallCardTitleStyles(expandedView) })
   titleInner.innerText = lister.createSanitizedTitle(logItem)
   titleInner.setAttribute('href', logItem.url)
-
+  titleInner.setAttribute('target', '_blank')
+  titleInner.setAttribute('rel', 'noopener noreferrer')
   titleOuter.appendChild(lister.openOutside(logItem.url))
   titleOuter.appendChild(titleInner)
-
   itemdiv.appendChild(titleOuter)
 
+  // image — hidden entirely when no image (no grey placeholder)
+  const imageBox = lister.imageBox(logItem.image, { hideIfNoImage: true }, titleInner)
+  if (imageBox) {
+    imageBox.firstChild.style.padding = '0px 5px 5px 5px'
+    if (!expandedView) {
+      imageBox.classList.add('vulog-expand-cursor')
+      imageBox.style['flex-shrink'] = '0'
+      imageBox.style['margin-top'] = '7px'
+      imageBox.style['margin-bottom'] = '4px'
+    }
+    imageBox.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
+    itemdiv.appendChild(imageBox)
+  }
+
+  // "Viewed for x minutes" — pinned to bottom of card via margin-top: auto
   itemdiv.appendChild(dg.div({
     className: 'scrollAndTimeSpent',
     style: {
-      height: '14px',
       overflow: 'hidden',
       'text-overflow': 'ellipsis',
       'white-space': 'nowrap',
-      color: MCSS.DARK_GREY
-      // 'margin-bottom': '5px'
+      color: '#7b8694',
+      'font-size': '11px',
+      'margin-top': expandedView ? '4px' : 'auto'
     }
   }, timeAndScrollString(logItem)))
-
-  // image
-  const imageBox = lister.imageBox(logItem.image, null, titleInner)
-  imageBox.firstChild.style.padding = '0px 5px 5px 5px'
-  imageBox.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
-  itemdiv.appendChild(imageBox)
 
   itemdiv.appendChild(dg.div({
     className: 'greyMessage',
@@ -951,7 +1347,7 @@ lister.drawlogItem = function (logItem, opt = {}) {
     }
   }, 'Click to view details'))
 
-  const markFromLog = (logItem?.purl && vState.logs?.lookups) ? vState.logs?.lookups[logItem.purl] : null // note this doesnt necessarily capture all marks, only recent ones...
+  const markFromLog = (logItem?.purl && vState.logs?.lookups) ? vState.logs?.lookups[logItem.purl] : null
   const stars = overlayUtils.drawstars(markFromLog || logItem, {
     drawTrash: false,
     showBookmark: true,
@@ -961,7 +1357,6 @@ lister.drawlogItem = function (logItem, opt = {}) {
   itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center', display: (expandedView ? 'block' : 'none') } }, stars))
   const smallStars = overlayUtils.drawSmallStars(markFromLog)
   smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
-  // smallStars.appendChild(dg.div({ style: { display: 'inline-block', cursor: 'pointer', 'vertical-align': 'top', margin: '8px 0px 0px 8px', color: 'lightgrey' } }, 'Share'))
   itemdiv.appendChild(dg.div({ className: 'smallStarsOnCard', style: { 'text-align': 'center', height: '15px', display: (expandedView ? 'none' : 'block') } }, smallStars))
 
   const notesBox = overlayUtils.drawMainNotesBox(markFromLog, { mainNoteSaver: vState.mainNoteSaver, log: logItem })
@@ -969,11 +1364,9 @@ lister.drawlogItem = function (logItem, opt = {}) {
 
   itemdiv.appendChild(lister.drawReferrerHistory(logItem))
 
-  const dateToUse = new Date(logItem.fj_modified_locally || logItem._date_modified || logItem.vCreated) // logItem._date_modified
-
-  const weekday = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
-  const dateString = weekday[dateToUse.getDay()] + ' ' + (dateToUse.toLocaleDateString() + ' ' + dateToUse.toLocaleTimeString()) // + ' ' + dateToUse
-  itemdiv.appendChild(dg.div({ className: 'dateString', style: { color: 'indianred', 'margin-top': '10px' } }, dateString))
+  const dateToUse = new Date(logItem.fj_modified_locally || logItem._date_modified || logItem.vCreated)
+  const dateString = lister.smallCardDateString(dateToUse, dateToUse, expandedView)
+  itemdiv.appendChild(dg.div({ className: 'dateString', style: lister.smallCardDateStyles(expandedView) }, dateString))
 
   const hLightOptions = {
     type: 'markHighlights',
@@ -1004,6 +1397,11 @@ lister.drawTabItem = function (logItem, opt = {}) {
   itemdiv.setAttribute('purl', logItem.purl)
   if (expandedView) itemdiv.setAttribute('expandedView', (expandedView))
   itemdiv.className = 'cardOuter'
+  if (!expandedView) {
+    itemdiv.style.display = 'flex'
+    itemdiv.style['flex-direction'] = 'column'
+    itemdiv.style.position = 'relative'
+  }
 
   const showHideCloseMuteAndExpand = async function (e) {
     await lister.setItemExpandedStatus(lister.idFromMark(logItem))
@@ -1019,28 +1417,58 @@ lister.drawTabItem = function (logItem, opt = {}) {
   const minMax = lister.minMaximizeButt(lister.idFromMark(logItem))
   lister.minMaximizeButtSet(minMax, true)
   minMax.onclick = showHideCloseMuteAndExpand
+  if (!expandedView) {
+    minMax.style.position = 'absolute'
+    minMax.style.top = '6px'
+    minMax.style.right = '6px'
+    minMax.style.float = 'none'
+    minMax.style['z-index'] = '2'
+  }
   itemdiv.appendChild(minMax)
 
-  itemdiv.appendChild(lister.domainSpanWIthRef(logItem, expandedView))
+  const domainOuter = lister.domainSpanWIthRef(logItem, expandedView)
+  domainOuter.className = 'cardDomainBar'
+  if (!expandedView) {
+    domainOuter.style['padding-right'] = '24px'
+    domainOuter.style['box-sizing'] = 'border-box'
+    domainOuter.style['flex-shrink'] = '0'
+    domainOuter.classList.add('vulog-expand-cursor')
+    domainOuter.onclick = showHideCloseMuteAndExpand
+  }
+  itemdiv.appendChild(domainOuter)
 
   if (!logItem.purl) console.warn('No purl is logItem', { logItem })
 
   const titleOuter = lister.titleOuter(expandedView)
-  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } })
+  if (!expandedView) {
+    titleOuter.style['flex-shrink'] = '0'
+    titleOuter.classList.add('vulog-expand-cursor')
+    titleOuter.onclick = async function (e) {
+      if (e.target.tagName !== 'A') await showHideCloseMuteAndExpand(e)
+    }
+  }
+  const titleInner = dg.a({ style: lister.smallCardTitleStyles(expandedView) })
   titleInner.innerText = lister.createSanitizedTitle(logItem)
   titleInner.setAttribute('href', logItem.purl)
   titleOuter.appendChild(lister.openOutside(logItem.purl, { itemdiv }))
   titleOuter.appendChild(titleInner)
-
   itemdiv.appendChild(titleOuter)
 
-  // image
-  const imageBox = lister.imageBox(logItem.image, null, titleInner)
-  imageBox.firstChild.style.padding = '0px 5px 5px 5px'
-  // imageBox.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(logItem)) }
-  itemdiv.appendChild(imageBox)
+  // image — hidden entirely when no image (no grey placeholder)
+  const imageBox = lister.imageBox(logItem.image, { hideIfNoImage: true }, titleInner)
+  if (imageBox) {
+    imageBox.firstChild.style.padding = '0px 5px 5px 5px'
+    if (!expandedView) {
+      imageBox.classList.add('vulog-expand-cursor')
+      imageBox.style['flex-shrink'] = '0'
+      imageBox.style['margin-top'] = '7px'
+      imageBox.style['margin-bottom'] = '4px'
+    }
+    imageBox.onclick = showHideCloseMuteAndExpand
+    itemdiv.appendChild(imageBox)
+  }
 
-  const markFromLog = (logItem?.purl && vState.logs?.lookups) ? vState.logs?.lookups[logItem.purl] : null // note this doesnt necessarily capture all marks, only recent ones...
+  const markFromLog = (logItem?.purl && vState.logs?.lookups) ? vState.logs?.lookups[logItem.purl] : null
   const stars = overlayUtils.drawstars(markFromLog || logItem, {
     drawTrash: false,
     showBookmark: true,
@@ -1072,9 +1500,11 @@ lister.drawTabItem = function (logItem, opt = {}) {
 
   if (logItem.vCreated || logItem.fj_modified_locally) {
     const dateToUse = new Date(logItem.vCreated || logItem.fj_modified_locally)
-    const weekday = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
-    const dateString = weekday[dateToUse.getDay()] + ' ' + (dateToUse.toLocaleDateString() + ' ' + dateToUse.toLocaleTimeString()) // + ' ' + dateToUse
-    itemdiv.appendChild(dg.div({ className: 'dateString', style: { color: 'indianred', 'margin-top': '5px' } }, dateString))
+    const dateString = lister.smallCardDateString(dateToUse, dateToUse, expandedView)
+    itemdiv.appendChild(dg.div({
+      className: 'dateString',
+      style: { ...lister.smallCardDateStyles(expandedView), 'margin-top': expandedView ? '5px' : 'auto' }
+    }, dateString))
   }
 
   const hLightOptions = {
@@ -1113,23 +1543,51 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
   itemdiv.setAttribute('tabtype', 'messages')
   itemdiv.setAttribute('purl', msgRecord.purl)
   itemdiv.className = 'cardOuter'
+  if (!expandedView) {
+    itemdiv.style.display = 'flex'
+    itemdiv.style['flex-direction'] = 'column'
+    itemdiv.style.position = 'relative'
+  }
 
   const minMax = lister.minMaximizeButt(lister.idFromMark(msgRecord))
   lister.minMaximizeButtSet(minMax, true)
+  if (!expandedView) {
+    minMax.style.position = 'absolute'
+    minMax.style.top = '6px'
+    minMax.style.right = '6px'
+    minMax.style.float = 'none'
+    minMax.style['z-index'] = '2'
+  }
   itemdiv.appendChild(minMax)
 
-  itemdiv.appendChild(lister.domainSpanWIthRef(msgRecord, expandedView))
+  const domainOuter = lister.domainSpanWIthRef(msgRecord, expandedView)
+  domainOuter.className = 'cardDomainBar'
+  if (!expandedView) {
+    domainOuter.style['padding-right'] = '24px'
+    domainOuter.style['box-sizing'] = 'border-box'
+    domainOuter.style['flex-shrink'] = '0'
+    domainOuter.classList.add('vulog-expand-cursor')
+    domainOuter.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(msgRecord)) }
+  }
+  itemdiv.appendChild(domainOuter)
 
   const titleOuter = lister.titleOuter(expandedView)
+  if (!expandedView) {
+    titleOuter.style['flex-shrink'] = '0'
+    titleOuter.classList.add('vulog-expand-cursor')
+    titleOuter.onclick = async function (e) {
+      if (e.target.tagName !== 'A') await lister.setItemExpandedStatus(lister.idFromMark(msgRecord))
+    }
+  }
   titleOuter.appendChild(lister.openOutside(msgRecord.url))
 
-  const titleInner = dg.a({ style: { overflow: 'hidden', 'text-decoration': 'none' } }, lister.createSanitizedTitle(msgRecord))
+  const titleInner = dg.a({ style: lister.smallCardTitleStyles(expandedView) }, lister.createSanitizedTitle(msgRecord))
   titleInner.setAttribute('href', msgRecord.url)
+  titleInner.setAttribute('target', '_blank')
+  titleInner.setAttribute('rel', 'noopener noreferrer')
   titleOuter.appendChild(titleInner)
 
   itemdiv.appendChild(titleOuter)
-
-  itemdiv.appendChild(lister.imageBox(msgRecord.image, null, titleInner))
 
   const markOnMarks = vState.marks.lookups[msgRecord.purl]
 
@@ -1141,18 +1599,28 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
   })
   itemdiv.appendChild(dg.div({ className: 'starsOnCard', style: { 'text-align': 'center', display: (expandedView ? 'block' : 'none') } }, stars))
 
-  const smallStars = overlayUtils.drawSmallStars(markOnMarks)
-  smallStars.onclick = async function () { await lister.setItemExpandedStatus(lister.idFromMark(msgRecord)) }
-  itemdiv.appendChild(dg.div({ className: 'smallStarsOnCard', style: { 'text-align': 'center', height: '15px', display: (expandedView ? 'none' : 'block') } }, smallStars))
+  // action pills (bookmark/star/inbox) on the left of the media block, info indicators on the right
+  const actionPills = !expandedView ? lister.drawMsgActionPills(markOnMarks) : null
+  const mediaBlock = lister.drawSmallCardMediaBlock(msgRecord, expandedView, titleInner, {
+    mediaHeight: '80px',
+    leftContent: actionPills,
+    showNotePreview: true,
+    notePreviewSource: (markOnMarks || msgRecord)
+  })
+  if (mediaBlock) {
+    if (!expandedView) mediaBlock.style['flex-shrink'] = '0'
+    itemdiv.appendChild(mediaBlock)
+  }
 
   const notesBox = overlayUtils.drawMainNotesBox(markOnMarks, { mainNoteSaver: vState.mainNoteSaver, log: msgRecord })
-  itemdiv.appendChild(dg.div({ className: 'vNote', style: { display: (expandedView ? 'block' : 'none'), padding: '10px 40px' } }, notesBox))
+  const notesOuter = dg.div({ className: 'vNote', style: { display: (expandedView ? 'block' : 'none'), padding: '10px 40px' } }, notesBox)
+  itemdiv.appendChild(notesOuter)
 
   itemdiv.appendChild(overlayUtils.areaTitle('Sharing', { display: 'none' }))
   itemdiv.appendChild(lister.sharingDetailsSkeleton(msgRecord.purl))
 
   itemdiv.appendChild(overlayUtils.vMessageCommentSummary(msgRecord))
-  itemdiv.appendChild(overlayUtils.vMessageCommentDetails(msgRecord.purl, msgRecord.vComments))
+  itemdiv.appendChild(overlayUtils.vMessageCommentDetails(msgRecord.purl, msgRecord.vComments, null, msgRecord))
 
   if ((markOnMarks && markOnMarks.vHighlights && markOnMarks.vHighlights.length > 0) || (msgRecord.vHighlights && msgRecord.vHighlights.length > 0)) {
     // itemdiv.appendChild(dg.h2('new hlights'))
@@ -1177,7 +1645,7 @@ lister.drawMessageItem = function (msgRecord, opt = {}) {
 }
 
 // Expanding card
-lister.setItemExpandedStatus = async function (id) {
+lister.setItemExpandedStatus = async function (id) { // 58px
   if (vState.viewType === 'fullHeight') console.error('setexpanded view cannot be used with fullheight')
   const theDiv = dg.el(id)
   const expandedView = theDiv.getAttribute('expandedView') === 'true'
@@ -1190,12 +1658,17 @@ lister.setItemExpandedStatus = async function (id) {
   theDiv.setAttribute('expandedView', doExpand || null)
   theDiv.style.overflow = doExpand ? 'scroll' : 'hidden'
 
+  // onsole.log('setItemExpandedStatus', { id, expandedView, doExpand })
+
   if (doExpand) {
     theDiv.style.position = 'absolute'
     theDiv.style['z-index'] = vState.zIndex++
   }
   const titleOuter = theDiv.querySelector('.vulog_title_url')
-  titleOuter.style.height = doExpand ? null : '33px'
+  titleOuter.style.height = doExpand ? 'auto' : '33px'
+  titleOuter.style.overflow = doExpand ? 'visible' : 'hidden'
+  titleOuter.firstChild.nextSibling.style.overflow = doExpand ? 'visible' : 'hidden'
+  titleOuter.firstChild.nextSibling.style.display = doExpand ? 'block' : '-webkit-box'
   const smallStarsOnCard = theDiv.querySelector('.smallStarsOnCard')
   if (smallStarsOnCard) smallStarsOnCard.style.display = doExpand ? 'block' : 'none'
 
@@ -1216,27 +1689,32 @@ lister.setItemExpandedStatus = async function (id) {
   }
   if (!doExpand) {
     setTimeout(() => {
-      theDiv.style.position = null
+      theDiv.style.position = (list === 'marks' || list === 'messages') ? 'relative' : null
       theDiv.style['z-index'] = null
     }, 1000)
   }
   // theDiv.o
   const trash = theDiv.querySelector('.vulog_overlay_trash')
+  const domainBar = theDiv.querySelector('.cardDomainBar')
 
   if (doExpand) {
     if (trash) trash.style.display = 'block'
     if (trash) trash.parentElement.style['padding-right'] = '40px'
     const color = list === 'tabs' && theDiv.parentElement.getAttribute('vCollapsible') === 'true' ? 'lightgrey' : 'white'
-    theDiv.firstChild.nextSibling.style.background = 'linear-gradient(to bottom, #aae9cc, ' + color + ' 20%, #aae9cc 20%, ' + color + ' 30%, #aae9cc 40%, ' + color + ' 50%, #aae9cc 60%, ' + color + ' 70%, #aae9cc 80%, ' + color + ' 90%)'
-    theDiv.firstChild.nextSibling.style.cursor = 'grab'
-    theDiv.firstChild.nextSibling.id = theDiv.id + 'header'
+    if (domainBar) {
+      domainBar.style.background = 'linear-gradient(to bottom, #aae9cc, ' + color + ' 20%, #aae9cc 20%, ' + color + ' 30%, #aae9cc 40%, ' + color + ' 50%, #aae9cc 60%, ' + color + ' 70%, #aae9cc 80%, ' + color + ' 90%)'
+      domainBar.style.cursor = 'grab'
+      domainBar.id = theDiv.id + 'header'
+    }
     lister.dragElement(theDiv)
   } else {
     if (trash) trash.style.display = 'none'
     if (trash) trash.parentElement.style['padding-right'] = null
-    theDiv.firstChild.nextSibling.style.background = null
-    theDiv.firstChild.nextSibling.style.cursor = null
-    theDiv.firstChild.nextSibling.id = null
+    if (domainBar) {
+      domainBar.style.background = null
+      domainBar.style.cursor = null
+      domainBar.id = null
+    }
   }
 
   // these are redunandant but added so transition looks better
@@ -1250,6 +1728,8 @@ lister.setItemExpandedStatus = async function (id) {
   if (sharingTitle) sharingTitle.style.display = doExpand ? 'block' : 'none'
   const starsOnCard = theDiv.querySelector('.starsOnCard')
   if (starsOnCard) starsOnCard.style.display = (doExpand || list === 'marks') ? 'block' : 'none'
+  const indicatorsStack = theDiv.querySelector('.cardIndicatorsStack')
+  if (indicatorsStack) indicatorsStack.style.display = doExpand ? 'none' : 'flex'
 
   // When expand, look up purl to see if it has been marked. And reset
   if (doExpand) {
@@ -1297,12 +1777,7 @@ lister.setItemExpandedStatus = async function (id) {
     if (trash) trash.style.display = 'block'
     const summarySharingAndHighlights = theDiv.querySelector('.summarySharingAndHighlights')
     if (summarySharingAndHighlights) summarySharingAndHighlights.style.display = 'none' // redundant with below - added here so it happens at starts
-    const notesBox = overlayUtils.drawMainNotesBox(logOrMsgToDraw, { mainNoteSaver: vState.mainNoteSaver })
-    const NoteDiv = theDiv.querySelector('.vNote')
-    if (NoteDiv) {
-      NoteDiv.innerHTML = ''
-      NoteDiv.appendChild(notesBox)
-    }
+    // const notesBox = overlayUtils.drawMainNotesBox(logOrMsgToDraw, { mainNoteSaver: vState.mainNoteSaver })
     const hLightOptions = {
       type: 'markHighLights',
       purl,
@@ -1338,15 +1813,30 @@ lister.setItemExpandedStatus = async function (id) {
   const messageItem = vState.messages.unfilteredItems.find((item) => item.purl === purl)
 
   const vMessageCommentDetailsDiv = theDiv.querySelector('.vMessageCommentDetails')
-  overlayUtils.vMessageCommentDetails(purl, messageItem?.vComments, vMessageCommentDetailsDiv)
+  overlayUtils.vMessageCommentDetails(purl, messageItem?.vComments, vMessageCommentDetailsDiv, messageItem)
+
+  const NoteDiv = theDiv.querySelector('.vulog_notes')
+  if (NoteDiv) {
+    lister.styleCardNotesBox(NoteDiv, vState.marks?.lookups[purl], doExpand)
+  } else {
+    console.warn('NoteDiv not found', { theDiv })
+  }
 
   Array.from(theDiv.childNodes).forEach(el => {
+    // if (doExpand) console.log('el', { className: el.className })
     switch (el.className) {
       case 'minMaximizeButt':
         lister.minMaximizeButtSet(el, !doExpand)
         break
       case 'summarySharingAndHighlights':
-        el.style.display = doExpand ? 'none' : 'grid'
+        el.style.display = doExpand ? 'none' : (el.getAttribute('data-display') || 'grid')
+        break
+      case 'cardDomainBar vulog-expand-cursor':
+        el.style.overflow = doExpand ? '' : 'hidden'
+        break
+      case 'smallCardPreNotesSpacer':
+      case 'smallCardBottomSpacer':
+        el.style.display = doExpand ? 'none' : 'block'
         break
       case 'markHighlights':
         el.style.display = doExpand ? 'block' : 'none'
@@ -1406,9 +1896,15 @@ lister.setItemExpandedStatus = async function (id) {
         break
     }
   })
+  
+  // Keep card scrolled to top to ensure green bar is visible
+  if (doExpand) {
+    theDiv.scrollTop = 0
+  }
 }
 const refreshSharedMarksinVstateFor = async function (purl) {
-  vState.sharedmarks.lookups[purl] = await freepr.feps.postquery({ app_table: 'cards.hiper.freezr.sharedmarks', q: { purl } })
+  vState.sharedmarks.lookups[purl] = await freezr.query('cards.hiper.freezr.sharedmarks', { purl })
+  // onsole.log('refreshSharedMarksinVstateFor refreshed shared marks for ', { purl, resp: vState.sharedmarks.lookups[purl] })
   return true
 }
 
@@ -1466,14 +1962,25 @@ lister.imageBox = function (image, styles, aElement) {
       image = ''
     }
   } 
-  const imageBox = dg.div({ style: { 'text-align': 'center', height: '80px', padding: '5px' } }, //
+  if (!image && styles?.hideIfNoImage) return null
+  const imageBox = dg.div({ className: 'cardImageBox', style: { 'text-align': 'center', height: '80px', padding: '5px' } }, //
     (image
       ? dg.img({ src: (image || ''), style: { 'max-width': '170px', 'max-height': '80px' } })
       : dg.div({ style: { margin: '10px 40px 10px 40px', border: '5px solid lightgrey', height: '60px' } })
     ))
+  if (styles?.display === 'none') {
+    imageBox.style.display = 'none'
+    imageBox.style.height = '0'
+    imageBox.style.padding = '0'
+    return imageBox
+  }
   if (styles) {
     for (const [key, attr] of Object.entries(styles)) {
+      if (key === 'hideIfNoImage') continue
       imageBox.firstChild.style[key] = attr
+      if (key === 'height' || key === 'max-height') {
+        imageBox.style.height = attr
+      }
     }
   }
   return imageBox
@@ -1561,9 +2068,9 @@ lister.domainSpan = function (markOrLog) {
 lister.titleOuter = function (expandedView) {
   return dg.div({
     style: {
-      overflow: 'hidden',
+      overflow: expandedView ? 'visible' : 'hidden',
       color: 'cornflowerblue',
-      height: (expandedView ? null : '33px'),
+      height: expandedView ? 'auto' : '33px',
       'margin-top': '5px'
     },
     className: 'vulog_title_url'
@@ -1617,7 +2124,7 @@ lister.drawReferrerHistory = function (logItem) {
   hist.forEach(item => {
     const newDomain = domainAppFromUrl(item.refPurl)
     if (lastDomain !== newDomain) {
-      const newDiv = dg.div({ style: { 'margin-left': '5px' } }, ' via ', dg.a({ href: item.refPurl, style: { } }, domainAppFromUrl(item.refPurl)))
+      const newDiv = dg.div({ style: { 'margin-left': '5px' } }, ' via ', dg.a({ href: item.refPurl, style: { }, target: '_blank', rel: 'noopener noreferrer' }, domainAppFromUrl(item.refPurl)))
       lastDiv.appendChild(newDiv)
       lastDiv = newDiv
       lastDomain = newDomain
@@ -1645,8 +2152,8 @@ lister.newDrawHighlights = function (purl, hLights, options) {
   if (options?.existingDiv) options.existingDiv.innerHTML = ''
   const innerHighs = options?.existingDiv || dg.div({ className: options.type, style: { display: 'none' } })
   if (hLights && hLights.length > 0) {
-    const title = (options?.type === 'msgHighLights' ? 'Highlights in Messages 1' : 'Your Highlights')
-    innerHighs.appendChild(overlayUtils.areaTitle('Highlights', { display: 'block', title, color: (options?.type === 'msgHighLights' ? 'purple' : '#057d47') }))
+    const title = (options?.type === 'msgHighLights' ? 'Highlights in Messages' : 'Your Highlights')
+    innerHighs.appendChild(overlayUtils.areaTitle('Highlights', { display: 'block', title, color: (options?.type === 'msgHighLights' ? '#4a30a0' : '#0a5c20') }))
 
     const hLightOpts = JSON.parse(JSON.stringify(options))
     hLightOpts.include_delete = true
@@ -1664,7 +2171,7 @@ lister.newDrawHighlights = function (purl, hLights, options) {
       innerHighs.appendChild(overlayUtils.drawHighlight(purl, hlight, hLightOpts))
     })
   } else if (!vState.freezrMeta?.userId && options?.type !== 'msgHighLights') { // ie relatively new user
-    innerHighs.appendChild(overlayUtils.areaTitle('Highlights', { display: 'block', title: 'Highlights', color: (options?.type === 'msgHighLights' ? 'purple' : '#057d47') }))
+    innerHighs.appendChild(overlayUtils.areaTitle('Highlights', { display: 'block', title: 'Highlights', color: (options?.type === 'msgHighLights' ? '#4a30a0' : '#0a5c20') }))
     innerHighs.appendChild(dg.div({ style: { color: 'grey', padding: '10px' } }, 'You can highlight text on pages by selecting the text and right-clicking on it to see your menu options.'))
   }
   return innerHighs
@@ -1711,7 +2218,7 @@ lister.sharingDetailsSkeleton = function (purl, options) {
   const outer = dg.div({
     className: 'sharingDetailsSkeleton',
     style: {
-      'min-height': (options?.minHeight || '150px'), display: 'none'
+      display: 'none'
     }
   })
   // const purl = msgRecord?.purl || options?.purl
@@ -1719,7 +2226,7 @@ lister.sharingDetailsSkeleton = function (purl, options) {
   outer.setAttribute('sectionDrawn', false)
   outer.setAttribute('purl', purl)
 
-  const menuDetails = dg.div({ className: 'sharingMenuDetails', style: { padding: '10px' } })
+  const menuDetails = dg.div({ className: 'sharingMenuDetails', style: { padding: '4px 10px' } })
   const summary = lister.summaryOfSharingOptions(purl, permsFromFreezrMetaState())
   if (!options || !options.hideSummary) menuDetails.appendChild(summary)
   if (vState.isLoggedIn) {
@@ -1727,12 +2234,9 @@ lister.sharingDetailsSkeleton = function (purl, options) {
     SHARING_MENU_TYPES.forEach(type => menuDetails.appendChild(drawEmptySharingSubsection(type)))
   }
   outer.appendChild(menuDetails)
-  setTimeout(function () {
-    expandSection(summary, { height: '180px' })
-    // need to set these as 'transitioned' doesnt get triggered when hidden
-    summary.style.height = null
-    summary.setAttribute('data-collapsed', 'false')
-  }, 100)
+  // No need to animate summary - just show it with auto height
+  summary.style.height = 'auto'
+  summary.setAttribute('data-collapsed', 'false')
   return outer
 }
 lister.postErrInSharingDetails = function (sharingDiv, errCode) {
@@ -1772,24 +2276,27 @@ lister.redrawSharingDetails = function (sharingDiv, options) {
   }
   return sharingDiv
 }
-const SHARING_MENU_TYPES = ['_public', '_privatelink', '_messages', '_privatefeed']
+const SHARING_MENU_TYPES = ['_public', '_privatelink', '_messages'] // _privatefeed removed
 lister.drawSharingMenuItems = function (purl, perms) {
-  const outer = dg.div({ className: 'sharingMenuItems', style: { 'text-align': 'center' } })
+  const outer = dg.div({ className: 'sharingMenuItems', style: { display: 'flex', gap: '8px', 'justify-content': 'center', padding: '4px 0 6px 0' } })
   SHARING_MENU_TYPES.forEach(shareType => { outer.appendChild(shareMenuButton(shareType, purl, perms)) })
   return outer
 }
 const shareButtStyle = {
-  display: 'inline-block',
+  display: 'inline-flex',
+  'align-items': 'center',
+  gap: '5px',
   'text-align': 'center',
-  'border-radius': '6px',
-  border: '2px solid',
-  'font-size': '11px',
-  color: 'cornflowerblue',
-  padding: '4px',
-  margin: '3px',
-  'min-width': '40px',
-  width: '70px',
-  cursor: 'pointer' // , position: ;relative
+  'border-radius': '20px',
+  border: '1.5px solid #c5d5e8',
+  'font-size': '12px',
+  color: '#3a6ea8',
+  'background-color': '#f0f5fb',
+  padding: '5px 12px',
+  margin: '0',
+  cursor: 'pointer',
+  transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
+  'user-select': 'none'
 }
 const shareMenuButton = function (shareType, purl, perms) {
   const theButton = dg.div({
@@ -1801,9 +2308,11 @@ const shareMenuButton = function (shareType, purl, perms) {
       const sharingButtonsDiv = actualButton.parentElement
       Array.from(sharingButtonsDiv.childNodes).forEach(el => {
         const buttonShareType = el.getAttribute('shareType')
-        el.style.color = (buttonShareType === chosenShareType) ? 'grey' : 'cornflowerblue'
-        el.style.border = (buttonShareType === chosenShareType) ? '' : '2px solid'
-        el.style.cursor = (buttonShareType === chosenShareType) ? 'normal' : 'pointer'
+        const isActive = (buttonShareType === chosenShareType)
+        el.style.color = isActive ? 'white' : '#3a6ea8'
+        el.style['background-color'] = isActive ? '#3a6ea8' : '#f0f5fb'
+        el.style['border-color'] = isActive ? '#3a6ea8' : '#c5d5e8'
+        el.style.cursor = isActive ? 'default' : 'pointer'
       })
       const sharingDetailsOuter = sharingButtonsDiv.nextSibling
       let elToExpand = null
@@ -1828,29 +2337,19 @@ const shareMenuButton = function (shareType, purl, perms) {
         if (elToExpand) expandSection(elToExpand)
       }, (didCollapseOne ? 500 : 0)) // at start, on popup there is no eltoexpand
     }
-  }, spanIconForShareType(shareType), titleTextFor(shareType))
+  }, spanIconForShareType(shareType), dg.span({ style: { 'line-height': '1' } }, titleTextFor(shareType)))
   theButton.setAttribute('shareType', shareType)
   return theButton
 }
 const titleTextFor = function (shareType) {
-  return (shareType === '_public'
-    ? 'Public'
-    : (shareType === '_privatelink'
-        ? 'Private'
-        : (shareType === '_privatefeed'
-            ? 'Feed'
-            : (shareType === '_messages'
-                ? 'Message'
-                : 'UNKNOWN'
-              ))))
+  if (shareType === '_public') return 'Public Post'
+  if (shareType === '_privatelink') return 'Private Link'
+  if (shareType === '_messages') return 'Message'
+  return 'UNKNOWN'
 }
 const spanIconForShareType = function (shareType) {
-  if (shareType === '_public') return dg.span({ style: { margin: '0 3px 0 3px' } }, dg.span({ className: 'fa fa-link' }))
-  if (shareType === '_messages') return dg.span({ style: { margin: '0 3px 0 3px' } }, dg.span({ className: 'fa fa-comment-o' }))
-  if (shareType === '_privatelink') return dg.span({ style: { margin: '0px 2px', padding: '0px 3px', height: '12px', border: '1px solid', 'border-radius': '8px' } }, dg.span({ className: 'fa fa-link', style: { 'font-size': '12px' } }))
-  if (shareType === '_privatefeed') return dg.span({ style: { margin: '0px 2px', padding: '0px 3px', height: '11px', border: '1px solid', 'border-radius': '3px', 'border-top': '3px double' } }, dg.span({ className: 'fa fa-users', style: { 'font-size': '10px' } }))
-
-  return dg.span({ style: { margin: '0px 3px 0 3px', padding: '0px 3px', height: '12px', border: '1px solid', 'border-radius': '8px', 'border-top': '2px double' } }, dg.span({ className: 'fa fa-user', style: { 'font-size': '12px' } }))
+  const iconClass = shareType === '_public' ? 'fa fa-globe' : shareType === '_messages' ? 'fa fa-paper-plane-o' : shareType === '_privatelink' ? 'fa fa-lock' : 'fa fa-share-alt'
+  return dg.span({ className: iconClass, style: { 'font-size': '13px', 'line-height': '1' } })
 }
 lister.makePublicShareButton = function (opts) {
   const { title, buttonText, onlineAction, callback, style } = opts // successText // shareType: _public, _privatelink, _privatefeed, _messages
@@ -1891,44 +2390,65 @@ lister.summaryOfSharingOptions = function (purl, perms, options) {
 
   if (!perms.isLoggedIn) {
     outer.appendChild(dg.span({ style: { color: 'darkgrey' } }, 'Connect to a freezr server to be able to share your bookmarks, notes and highlights. '))
-    outer.appendChild(dg.a({ href: 'https://www.freezr.info' }, 'Cleck here to find out more about setting up a freezr server.'))
-    outer.appendChild(dg.div(dg.br(), dg.div({ style: { color: 'grey' } }, dg.span('If you already have a feezr server, log in '), dg.a({ href: '/main/settings.html' }, 'on the setting page.'))))
+    outer.appendChild(dg.a({ href: 'https://www.freezr.info', target: '_blank', rel: 'noopener noreferrer' }, 'Cleck here to find out more about setting up a freezr server.'))
+    outer.appendChild(dg.div(dg.br(), dg.div({ style: { color: 'grey' } }, dg.span('If you already have a freezr server, log in '), dg.a({ href: '/main/settings.html', target: '_blank', rel: 'noopener noreferrer' }, 'on the setting page.'))))
     return outer
   }
   outer.appendChild(dg.br())
   const havePublicPerm = perms.havePublicPerm
 
+  const hrefCore = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')
+  const rowStyle = { display: 'flex', 'align-items': 'flex-start', gap: '6px', padding: '4px 0', 'font-size': '12px', color: '#4a5a6a', 'line-height': '1.5' }
+  const labelStyle = { 'font-weight': '600', color: '#2e4a6e', 'white-space': 'nowrap', 'flex-shrink': '0' }
+  const iconStyle = { 'font-size': '13px', color: '#3a6ea8', 'margin-top': '2px', 'flex-shrink': '0' }
+
   // Public Summary
   const publicMark = getPublicMark(purl)
   const publicUrl = getPublicUrl(publicMark)
-  const hrefCore = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '')
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span('You can publish your bookmark by granting '), dg.a({ href: hrefCore + '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission')))
+    outer.appendChild(dg.div({ style: rowStyle },
+      dg.span({ className: 'fa fa-globe', style: iconStyle }),
+      dg.span({ style: labelStyle }, 'Public: '),
+      dg.span({}, 'Grant '), dg.a({ href: hrefCore + '/account/app/settings/cards.hiper.freezr', target: '_blank', rel: 'noopener noreferrer' }, 'link_share permission'), dg.span({}, ' to publish your bookmarks.')))
   } else if (publicMark) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), dg.span(('Your bookmark was published.'), dg.a({ href: hrefCore + '/' + publicUrl }, 'You can find it here.'), dg.span(' Press the Public button for more options.'))))
+    outer.appendChild(dg.div({ style: rowStyle },
+      dg.span({ className: 'fa fa-globe', style: iconStyle }),
+      dg.span({ style: labelStyle }, 'Public: '),
+      dg.span({}, 'Your bookmark is published. '),
+      dg.a({ href: hrefCore + '/' + publicUrl, target: '_blank', rel: 'noopener noreferrer' }, 'View it here.')))
   } else {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), 'Press on the Public button to publish this bookmark. '))
+    outer.appendChild(dg.div({ style: rowStyle },
+      dg.span({ className: 'fa fa-globe', style: iconStyle }),
+      dg.span({ style: labelStyle }, 'Public: '),
+      dg.span({}, 'Press the Public button to publish this bookmark.')))
   }
 
   // Private Summary
   const privateMark = getPrivateMark(purl)
   const privateUrl = getPrivateUrl(privateMark)
-  outer.appendChild(dg.br())
   if (!havePublicPerm) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span('You can create a private link, protected b a code, to your bookmark by granting '), dg.a({ href: hrefCore + '/account/app/settings/cards.hiper.freezr' }, 'the link_share permission.')))
+    outer.appendChild(dg.div({ style: rowStyle },
+      dg.span({ className: 'fa fa-lock', style: iconStyle }),
+      dg.span({ style: labelStyle }, 'Private Link: '),
+      dg.span({}, 'Grant '), dg.a({ href: hrefCore + '/account/app/settings/cards.hiper.freezr', target: '_blank', rel: 'noopener noreferrer' }, 'link_share permission'), dg.span({}, ' to create a private link.')))
   } else if (privateMark) {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Sharing: '), dg.span(('A private link has been created for your bookmark.'), dg.a({ href: hrefCore + '/' + privateUrl }, 'You can find it here.'), dg.span(' Press the Private button for more options.'))))
+    outer.appendChild(dg.div({ style: rowStyle },
+      dg.span({ className: 'fa fa-lock', style: iconStyle }),
+      dg.span({ style: labelStyle }, 'Private Link: '),
+      dg.span({}, 'A private link has been created. '),
+      dg.a({ href: hrefCore + '/' + privateUrl, target: '_blank', rel: 'noopener noreferrer' }, 'View it here.')))
   } else {
-    outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Public: '), 'Press on the Private button to create a private link to this bookmark - this will be a publicly accessible url oritected b a simple code.. '))
+    outer.appendChild(dg.div({ style: rowStyle },
+      dg.span({ className: 'fa fa-lock', style: iconStyle }),
+      dg.span({ style: labelStyle }, 'Private Link: '),
+      dg.span({}, 'Press the Private Link button to create a code-protected shareable URL.')))
   }
 
   // Messaging Summary
-  outer.appendChild(dg.br())
-  outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Messaging: '), dg.span('Share your bookmark with your contacts ')))
-
-  // Feed Summary
-  outer.appendChild(dg.br())
-  outer.appendChild(dg.div(dg.span({ style: { 'font-weight': 'bold' } }, 'Private Feed: '), dg.span('Share your bookmark with your contacts ')))
+  outer.appendChild(dg.div({ style: rowStyle },
+    dg.span({ className: 'fa fa-paper-plane-o', style: iconStyle }),
+    dg.span({ style: labelStyle }, 'Message: '),
+    dg.span({}, 'Share this bookmark directly with your contacts.')))
 
   // outer.style.height = '180px'
   // outer.style.transition = 'height 0.3s ease-out'
@@ -1942,6 +2462,68 @@ const drawEmptySharingSubsection = function (type) {
   outer.setAttribute('shareType', type)
   return outer
 }
+const duplicateShareWarningBox = function ({ purl, shareType, marks = [], outer }) {
+  if (!Array.isArray(marks) || marks.length <= 1) return null
+  const typeLabel = (shareType === '_public') ? 'public' : 'private'
+  const warningOuter = dg.div({
+    style: {
+      margin: '10px 0 2px 0',
+      padding: '8px',
+      border: '1px solid #f2c7c7',
+      'border-radius': '6px',
+      'background-color': '#fff6f6',
+      color: '#8d2d2d',
+      'font-size': '12px'
+    }
+  },
+  dg.div({ style: { 'margin-bottom': '6px', 'font-weight': '600' } },
+    'Warning: Multiple ' + typeLabel + ' share items exist for this bookmark.'))
+
+  marks.forEach((sharedMark, idx) => {
+    const dateStamp = new Date(sharedMark?._date_modified || sharedMark?._date_created || Date.now()).toLocaleDateString()
+    const row = dg.div({
+      style: {
+        display: 'flex',
+        'align-items': 'center',
+        'justify-content': 'space-between',
+        gap: '8px',
+        padding: '2px 0'
+      }
+    },
+    dg.span({ style: { color: '#6f3a3a' } }, '#' + (idx + 1) + '  ' + (sharedMark?._id || 'no id') + '  (' + dateStamp + ')'))
+
+    row.appendChild(lister.makePublicShareButton({
+      title: 'Delete duplicate share item',
+      buttonText: 'Delete',
+      style: {
+        color: '#b00020',
+        border: '1px solid #efc3c3',
+        'background-color': '#fff',
+        padding: '1px 8px',
+        'font-size': '10px',
+        'min-height': '18px',
+        'line-height': '16px'
+      },
+      onlineAction: async function () {
+        try {
+          const denyRet = await freezr.perms.shareRecords(sharedMark._id, { grantees: [shareType], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
+          if (!denyRet || denyRet.error) throw new Error('Error removing share permission: ' + (denyRet?.error || 'unknown'))
+          const deleteRet = await freezr.delete('cards.hiper.freezr.sharedmarks', sharedMark._id)
+          if (!deleteRet || deleteRet.error) throw new Error('Error deleting duplicate shared mark: ' + (deleteRet?.error || 'unknown'))
+          await refreshSharedMarksinVstateFor(purl)
+          drawSharingSubsection[shareType](purl, { existingDiv: outer })
+          outer.setAttribute('vStateChanged', 'true')
+          return deleteRet
+        } catch (e) {
+          console.warn('Error deleting duplicate shared mark', { e, sharedMark, shareType })
+          return { error: e?.message || e?.error || 'unknown' }
+        }
+      }
+    }))
+    warningOuter.appendChild(row)
+  })
+  return warningOuter
+}
 const drawSharingSubsection = {}
 drawSharingSubsection._public = function (purl, options) {
   // options: existingDiv log
@@ -1953,13 +2535,14 @@ drawSharingSubsection._public = function (purl, options) {
 
   if (!perms.havePublicPerm) {
     const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/app/settings/cards.hiper.freezr'
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href, target: '_blank', rel: 'noopener noreferrer' }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
   const mark = vState.marks.lookups[purl]
-  const publicMark = getPublicMark(purl)
-  const isPublished = hasPublicMark(purl)
+  const publicMarks = getPublicMarks(purl)
+  const publicMark = publicMarks[0] || null
+  const isPublished = publicMarks.length > 0
   const publicUrl = getPublicUrl(publicMark)
   const publishDate = getPublishDate(publicMark, '_public')
 
@@ -1979,7 +2562,7 @@ drawSharingSubsection._public = function (purl, options) {
     messageBox.style['max-height'] = 'none'
 
     if (publicUrl) {
-      outer.appendChild(dg.div(dg.span(('Your bookmark was made public on ' + new Date(publishDate).toLocaleDateString() + '.'), dg.span(' You can find it '), dg.a({ href: vState.freezrMeta.serverAddress + '/' + publicUrl, target: '_blank' }, 'here.'), dg.span(' You can republish the current mark below, or delete it.'))))
+      outer.appendChild(dg.div(dg.span(('Your bookmark was made public on ' + new Date(publishDate).toLocaleDateString() + '.'), dg.span(' You can find it '), dg.a({ href: vState.freezrMeta.serverAddress + '/' + publicUrl, target: '_blank', rel: 'noopener noreferrer' }, 'here.'), dg.span(' You can republish the current mark below, or delete it.'))))
       outer.appendChild(messageBox)
     } else {
       outer.appendChild(dg.div(dg.span(('There seems to have been issues. Your bookmaark was made public on ' + new Date(publicMark._date_modified).toLocaleDateString() + ', but it seems the operation was incompete.. '), dg.span(' You can republish the current mark below, or delete it to retry.'))))
@@ -2003,14 +2586,14 @@ drawSharingSubsection._public = function (purl, options) {
             if (messageBox.innerText) newMark.vComments = [{ text: messageBox.innerText, vCreated: new Date().getTime() }]
             newMark.vSearchString = resetVulogKeyWords(newMark)
             newMark._id = publicMark._id
-            const updateRet = await freepr.feps.update(newMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
+            const updateRet = await freezr.update('cards.hiper.freezr.sharedmarks', newMark._id, newMark)
             if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
-            const shareRet = await freepr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
+            const shareRet = await freezr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
             outer.innerHTML = ''
             outer.appendChild(dg.div(
               dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was republished.'),
-              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + newMark._id, target: '_blank' }, 'You can find it here.')
+              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + newMark._id, target: '_blank', rel: 'noopener noreferrer' }, 'You can find it here.')
             ))
             await refreshSharedMarksinVstateFor(purl)
             outer.setAttribute('vStateChanged', 'true')
@@ -2033,10 +2616,10 @@ drawSharingSubsection._public = function (purl, options) {
         onlineAction: async function () {
           try {
             if (!publicMark) throw new Error('No public mark found')
-            const shareRet = await freepr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
+            const shareRet = await freezr.perms.shareRecords(publicMark._id, { grantees: ['_public'], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error in shareRecords of mark: ' + (shareRet?.error || 'unknown'))
 
-            const deleteRet = await freepr.feps.delete(publicMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
+            const deleteRet = await freezr.delete('cards.hiper.freezr.sharedmarks', publicMark._id)
             if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
             if (deleteRet.success) {
               outer.innerHTML = ''
@@ -2054,6 +2637,8 @@ drawSharingSubsection._public = function (purl, options) {
       }
     ))
     outer.appendChild(buttons)
+    const publicDupWarning = duplicateShareWarningBox({ purl, shareType: '_public', marks: publicMarks, outer })
+    if (publicDupWarning) outer.appendChild(publicDupWarning)
     // add spinners and padding
   } else {
     outer.appendChild(dg.div('You can make your link public. It will show up on your public page and you can share the link wih any one. Your highlights and initial hilight comments will also be shared.'))
@@ -2080,16 +2665,16 @@ drawSharingSubsection._public = function (purl, options) {
             markCopy.isPublic = true
             markCopy.vSearchString = resetVulogKeyWords(markCopy)
             // deal with case of crashing here - isPublic is true but it is not shared.
-            const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
+            const createRet = await freezr.create('cards.hiper.freezr.sharedmarks', markCopy)
             if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
             markCopy._id = createRet._id
 
-            const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
+            const shareRet = await freezr.perms.shareRecords(createRet._id, { grantees: ['_public'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             vState.sharedmarks.lookups[purl].push(createRet)
             outer.innerHTML = ''
             outer.appendChild(dg.div(
               dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was published.'),
-              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + createRet._id, target: '_blank' }, 'You can find it here.')
+              dg.a({ style: { margin: '10px' }, href: vState.freezrMeta.serverAddress + '/@' + vState.freezrMeta.userId + '/cards.hiper.freezr.sharedmarks/' + createRet._id, target: '_blank', rel: 'noopener noreferrer' }, 'You can find it here.')
             ))
             await refreshSharedMarksinVstateFor(purl)
             outer.setAttribute('vStateChanged', 'true')
@@ -2101,7 +2686,7 @@ drawSharingSubsection._public = function (purl, options) {
           }
         }
       })
-    button.style.width = '150px'
+    // button.style.width = '150px'
     const holder = dg.div({ style: { 'text-align': 'center' } })
     holder.appendChild(button)
     outer.appendChild(holder)
@@ -2118,12 +2703,13 @@ drawSharingSubsection._privatelink = function (purl, options) {
 
   if (!perms.havePublicPerm) {
     const href = hrefCore + '/account/app/settings/cards.hiper.freezr'
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant the app permission to share links with others.'), dg.a({ href, target: '_blank', rel: 'noopener noreferrer' }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
   const mark = vState.marks.lookups[purl]
-  const privateMark = getPrivateMark(purl)
+  const privateMarks = getPrivateMarks(purl)
+  const privateMark = privateMarks[0] || null
   const privateUrl = getPrivateUrl(privateMark)
   const publishDate = getPublishDate(privateMark, '_privatelink')
 
@@ -2143,7 +2729,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
     messageBox.style['max-height'] = 'none'
 
     if (privateUrl) {
-      outer.appendChild(dg.div(dg.span(('You created a private link to this bookmark on ' + new Date(publishDate).toLocaleDateString() + '.'), dg.span(' You can find it '), dg.a({ href: hrefCore + '/' + privateUrl }, 'here.'), dg.span(' You can republish the current mark below, or delete it.'))))
+      outer.appendChild(dg.div(dg.span(('You created a private link to this bookmark on ' + new Date(publishDate).toLocaleDateString() + '.'), dg.span(' You can find it '), dg.a({ href: hrefCore + '/' + privateUrl, target: '_blank', rel: 'noopener noreferrer' }, 'here.'), dg.span(' You can republish the current mark below, or delete it.'))))
       outer.appendChild(messageBox)
     } else {
       outer.appendChild(dg.div(dg.span(('There seems to have been issues. A private link was created on ' + new Date(privateMark._date_modified).toLocaleDateString() + ', but it seems the operation was incompete.'), dg.span(' You can republish the current mark below, or delete it to retry.'))))
@@ -2161,9 +2747,9 @@ drawSharingSubsection._privatelink = function (purl, options) {
           try {
             privateMark.vComments = []
             if (messageBox.innerText) privateMark.vComments = [{ text: messageBox.innerText, vCreated: new Date().getTime() }]
-            const updateRet = await freepr.feps.update(privateMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
+            const updateRet = await freezr.update('cards.hiper.freezr.sharedmarks', privateMark._id, privateMark)
             if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
-            const shareRet = await freepr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
+            const shareRet = await freezr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
             outer.innerHTML = ''
             outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Your bookmark was republished. You can access it here'))
@@ -2189,9 +2775,9 @@ drawSharingSubsection._privatelink = function (purl, options) {
         onlineAction: async function () {
           try {
             if (!privateMark) throw new Error('No public mark found')
-            const shareRet = await freepr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
+            const shareRet = await freezr.perms.shareRecords(privateMark._id, { grantees: ['_privatelink'], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
             if (!shareRet || shareRet.error) throw new Error('Error in shareRecords of mark: ' + (shareRet?.error || 'unknown'))
-            const deleteRet = await freepr.feps.delete(privateMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
+            const deleteRet = await freezr.delete('cards.hiper.freezr.sharedmarks', privateMark._id)
             if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
             if (deleteRet.success) {
               outer.innerHTML = ''
@@ -2210,6 +2796,8 @@ drawSharingSubsection._privatelink = function (purl, options) {
       }
     ))
     outer.appendChild(buttons)
+    const privateDupWarning = duplicateShareWarningBox({ purl, shareType: '_privatelink', marks: privateMarks, outer })
+    if (privateDupWarning) outer.appendChild(privateDupWarning)
     // add spinners and padding
   } else {
     outer.appendChild(dg.div('You can create a private link to this bookmark so you can share a link with your contacts without forcing them to sign up for vulog. Your highlights and initial hilight comments will also be shared.'))
@@ -2236,14 +2824,14 @@ drawSharingSubsection._privatelink = function (purl, options) {
 
             markCopy.isPublic = false
             // deal with case of crashing here - isPublic is true but it is not shared.
-            const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
+            const createRet = await freezr.create('cards.hiper.freezr.sharedmarks', markCopy)
             if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
             markCopy._id = createRet._id
 
-            const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
+            const shareRet = await freezr.perms.shareRecords(createRet._id, { grantees: ['_privatelink'], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
             vState.sharedmarks.lookups[purl].push(createRet)
             outer.innerHTML = ''
-            outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('You created a shared bookmark.'), dg.a({ href: (hrefCore + '/' + shareRet._publicid + '?code=' + shareRet.code) }, 'Access it here.')))
+            outer.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('You created a shared bookmark.'), dg.a({ href: (hrefCore + '/' + shareRet._publicid + '?code=' + shareRet.code), target: '_blank', rel: 'noopener noreferrer' }, 'Access it here.')))
             await refreshSharedMarksinVstateFor(purl)
             outer.setAttribute('vStateChanged', 'true')
             return shareRet
@@ -2254,7 +2842,7 @@ drawSharingSubsection._privatelink = function (purl, options) {
           }
         }
       })
-    button.style.width = '150px'
+    // button.style.width = '150px'
     const holder = dg.div({ style: { 'text-align': 'center' } })
     holder.appendChild(button)
     outer.appendChild(holder)
@@ -2269,7 +2857,7 @@ drawSharingSubsection._privatefeed = function (purl, options) {
 
   if (!perms.havePublicPerm || !perms.haveFeedPerm) {
     const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/app/settings/cards.hiper.freezr'
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href }, 'Press here to grant the link_share permission.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, dg.div('You need to grant two permission to post to feeds - both a public sharing permission and a permission to read your feeds.'), dg.a({ href, target: '_blank', rel: 'noopener noreferrer' }, 'Press here to grant the link_share permission.')))
     return outer
   }
 
@@ -2278,9 +2866,9 @@ drawSharingSubsection._privatefeed = function (purl, options) {
 
   if (!vState.feedcodes || vState.feedcodes.length === 0) {
     if (vState.isExtension) {
-      outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: (vState.freezrMeta?.serverAddress || 'https://freezr.info') + '/account/contacts' }, 'Press here to go to your contacts page and press other options..'), dg.a({ href: '/main/settings.html' }, 'Or if you just created a feed go to settings to sync with your server, or refresh this page..')))
+      outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: (vState.freezrMeta?.serverAddress || 'https://freezr.info') + '/account/contacts', target: '_blank', rel: 'noopener noreferrer' }, 'Press here to go to your contacts page and press other options..'), dg.a({ href: '/main/settings.html', target: '_blank', rel: 'noopener noreferrer' }, 'Or if you just created a feed go to settings to sync with your server, or refresh this page..')))
     } else {
-      outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: '/account/contacts' }, 'Press here to go to your contacts page and press other options..')))
+      outer.appendChild(dg.div(dg.span('You need to create a feed to share with others.'), dg.a({ href: '/account/contacts', target: '_blank', rel: 'noopener noreferrer' }, 'Press here to go to your contacts page and press other options..')))
     }
   } else {
     outer.appendChild(dg.div('You can add specific bookmarks to your private feeds.'))
@@ -2309,15 +2897,15 @@ drawSharingSubsection._privatefeed = function (purl, options) {
                 // onsole.warn('to publish', { markCopy })
 
                 // deal with case of crashing here - isPublic is true but it is not shared.
-                const createRet = await freepr.ceps.create(markCopy, { app_table: 'cards.hiper.freezr.sharedmarks' })
+                const createRet = await freezr.create('cards.hiper.freezr.sharedmarks', markCopy)
                 if (!createRet || createRet.error) throw new Error('Error creating shared mark: ' + (createRet?.error || 'unknown'))
                 markCopy._id = createRet._id
 
-                const shareRet = await freepr.perms.shareRecords(createRet._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
+                const shareRet = await freezr.perms.shareRecords(createRet._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
                 vState.sharedmarks.lookups[purl].push(createRet)
 
                 const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + ('/public?feed=' + feedName + '&code=' + shareRet.privateFeedCode)
-                buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href }, feedName + '!')))
+                buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, dg.span('Posted to '), dg.a({ href, target: '_blank', rel: 'noopener noreferrer' }, feedName + '!')))
                 await refreshSharedMarksinVstateFor(purl)
                 outer.setAttribute('vStateChanged', 'true')
                 return shareRet
@@ -2346,12 +2934,12 @@ drawSharingSubsection._privatefeed = function (purl, options) {
             try {
               feedMark.vComments = []
               if (section.querySelector('.vulog_overlay_input').innerText) feedMark.vComments = [{ text: section.querySelector('.vulog_overlay_input').innerText, vCreated: new Date().getTime() }]
-              const updateRet = await freepr.feps.update(feedMark, { app_table: 'cards.hiper.freezr.sharedmarks' })
+              const updateRet = await freezr.update('cards.hiper.freezr.sharedmarks', feedMark._id, feedMark)
               // buttonHolder.innerHTML = ' '
               buttonHolder.previousSibling.innerHTML = ' ' 
 
               if (!updateRet || updateRet.error) throw new Error('Error updating shared mark: ' + (updateRet?.error || 'unknown'))
-              const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
+              const shareRet = await freezr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'grant', table_id: 'cards.hiper.freezr.sharedmarks' })
               if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
               buttonHolder.parentElement.appendChild(dg.div({ style: { padding: '10px', color: 'red' } }, 'Reposted tp feed!!'))
               await refreshSharedMarksinVstateFor(purl)
@@ -2374,9 +2962,9 @@ drawSharingSubsection._privatefeed = function (purl, options) {
               if (!feedMark) throw new Error('No public mark found')
               // buttonHolder.innerHTML = ' '
               buttonHolder.nextSibling.innerHTML = ' ' 
-              const shareRet = await freepr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
+              const shareRet = await freezr.perms.shareRecords(feedMark._id, { grantees: ['_privatefeed:' + feedName], name: 'public_link', action: 'deny', table_id: 'cards.hiper.freezr.sharedmarks' })
               if (!shareRet || shareRet.error) throw new Error('Error sharing: ' + (shareRet?.error || 'unknown'))
-              const deleteRet = await freepr.feps.delete(feedMark._id, { app_table: 'cards.hiper.freezr.sharedmarks' })
+              const deleteRet = await freezr.delete('cards.hiper.freezr.sharedmarks', feedMark._id)
               if (!deleteRet || deleteRet.error) throw new Error('Error sharing: ' + (deleteRet?.error || 'unknown'))
               if (!deleteRet || deleteRet.error) throw new Error('Error updating shared mark: ' + (deleteRet?.error || 'unknown'))
               if (deleteRet.success) {
@@ -2430,13 +3018,13 @@ drawSharingSubsection._messages = function (purl, options) {
     const innerPerms = dg.span()
     if ((!perms.haveMessagingPerm && perms.haveContactsPerm) || (perms.haveMessagingPerm && !perms.haveContactsPerm)) innerPerms.innerText = 'You have only granted one of the two permissions'
     const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/app/settings/cards.hiper.freezr'
-    outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href }, 'Press here to grant   permissions.')))
+    outer.appendChild(dg.div({ style: { padding: '5px' } }, innerPerms, dg.div('You need to grant two permission to send messages.'), dg.a({ href, target: '_blank', rel: 'noopener noreferrer' }, 'Press here to grant   permissions.')))
     return outer
   }
 
   if (!vState.friends || vState.friends.length === 0) {
     const href = (vState.isExtension ? (vState.freezrMeta?.serverAddress || 'https://freezr.info') : '') + '/account/contacts'
-    outer.appendChild(dg.div(dg.span('You have no contacts. ;( .'), dg.a({ href }, 'Add contacts on your server..')))
+    outer.appendChild(dg.div(dg.span('You have no contacts. ;( .'), dg.a({ href, target: '_blank', rel: 'noopener noreferrer' }, 'Add contacts on your server..')))
   } else {
     overlayUtils.setUpMessagePurlWip(purl)
 
@@ -2448,38 +3036,65 @@ drawSharingSubsection._messages = function (purl, options) {
 }
 const hasPublicMark = function (purl) {
   if (!purl) return false
-  const sharedMarksList = vState.sharedmarks?.lookups ? vState.sharedmarks.lookups[purl] : null
-  // takes a list of queried sharedmakrks to see if any are public
-  if (!sharedMarksList || sharedMarksList.length === 0) return false
-  return sharedMarksList.some(mark => mark.isPublic)
+  return getPublicMarks(purl).length > 0
 }
 const getPublicMark = function (purl) {
+  const publicMarks = getPublicMarks(purl)
+  if (!publicMarks || publicMarks.length === 0) return null
+  return publicMarks[0]
+}
+const getPublicMarks = function (purl) {
   const sharedMarksList = vState.sharedmarks?.lookups ? vState.sharedmarks.lookups[purl] : null
   // takes a list of queried sharedmakrks to see if any are public
-  if (!sharedMarksList || sharedMarksList.length === 0) return null
-  return sharedMarksList.find(m => m.isPublic)
+  if (!sharedMarksList || sharedMarksList.length === 0) return []
+  return sharedMarksList
+    .filter(mark => (mark.isPublic && getPublicLinkAccessible(mark, '_public')?.granted))
+    .sort((a, b) => (b?._date_modified || b?._date_created || 0) - (a?._date_modified || a?._date_created || 0))
+}
+const getPublicLinkAccessible = function (mark, grantee = '_public') {
+  // New format: _accessibles is an array of permission entries.
+  if (Array.isArray(mark?._accessibles)) {
+    return mark._accessibles.find(entry => (
+      entry?.grantee === grantee &&
+      entry?.permission_name === 'public_link' &&
+      (entry?.requestor_app === 'cards.hiper.freezr' || entry?.requestor_app === 'cards_hiper_freezr' || !entry?.requestor_app)
+    )) || null
+  }
+  // Legacy format: nested object at _accessible[grantee]['cards_hiper_freezr/public_link'].
+  if (mark?._accessible?.[grantee]) {
+    return mark._accessible[grantee]['cards_hiper_freezr/public_link'] ||
+      mark._accessible[grantee]['cards.hiper.freezr/public_link'] ||
+      null
+  }
+  return null
 }
 const getPublicUrl = function (publicMark) {
-  if (publicMark?._accessible?._public && publicMark._accessible._public['cards_hiper_freezr/public_link']?.granted) return publicMark._accessible._public['cards_hiper_freezr/public_link'].public_id
+  const accessibleObj = getPublicLinkAccessible(publicMark, '_public')
+  if (accessibleObj?.granted && accessibleObj?.public_id) return accessibleObj.public_id
   return null
 }
 const getPrivateMark = function (purl) {
-  if (!purl) return false
+  const privateMarks = getPrivateMarks(purl)
+  if (!privateMarks || privateMarks.length === 0) return null
+  return privateMarks[0]
+}
+const getPrivateMarks = function (purl) {
+  if (!purl) return []
   const sharedMarksList = vState.sharedmarks?.lookups ? vState.sharedmarks.lookups[purl] : null
-  // takes a list of queried sharedmakrks to see if any are public
-  if (!sharedMarksList || sharedMarksList.length === 0) return null
-  return sharedMarksList.find(mark => (!mark.isPublic && mark._accessible?._privatelink && mark._accessible._privatelink['cards_hiper_freezr/public_link']?.granted))
+  if (!sharedMarksList || sharedMarksList.length === 0) return []
+  return sharedMarksList
+    .filter(mark => (!mark.isPublic && getPublicLinkAccessible(mark, '_privatelink')?.granted))
+    .sort((a, b) => (b?._date_modified || b?._date_created || 0) - (a?._date_modified || a?._date_created || 0))
 }
 const getPrivateUrl = function (privateMark) {
-  const grantedAccessible = (privateMark?._accessible?._privatelink && privateMark._accessible._privatelink['cards_hiper_freezr/public_link']?.granted)
-  if (!grantedAccessible) return null
-
-  const accessibleObj = privateMark._accessible._privatelink['cards_hiper_freezr/public_link']
+  const accessibleObj = getPublicLinkAccessible(privateMark, '_privatelink')
+  if (!accessibleObj?.granted) return null
   const code = (accessibleObj.codes && accessibleObj.codes.length > 0) ? accessibleObj.codes[0] : null
   if (!code) return null
   return accessibleObj.public_id + '?code=' + code
 }
 const getFeedMark = function (purl, feedName) {
+  // OLD FORMAT: still reads _accessible object. These need to be updated once private-feed sharing is re-enabled.
   if (!purl) return false
   const sharedMarksList = vState.sharedmarks?.lookups ? vState.sharedmarks.lookups[purl] : null
   // takes a list of queried sharedmakrks to see if any are public
@@ -2492,7 +3107,8 @@ const getFeedMark = function (purl, feedName) {
   ))
 }
 const getPublishDate = function (sharedMark, type) {
-  if (sharedMark?._accessible && sharedMark?._accessible[type] && sharedMark._accessible[type]['cards_hiper_freezr/public_link']?.granted) return sharedMark._accessible[type]['cards_hiper_freezr/public_link']._date_published
+  const accessibleObj = getPublicLinkAccessible(sharedMark, type)
+  if (accessibleObj?.granted) return accessibleObj._date_published || null
   return null
 }
 const getMarkFromVstateList = function (purl, options) {
@@ -2511,7 +3127,7 @@ const getMarkFromVstateList = function (purl, options) {
 
 const collapsibleDiv = function (className) {
   return dg.div({
-    style: { height: 0, overflow: 'hidden', transition: 'height 0.2s ease-out' },
+    style: { height: 0, overflow: 'hidden', transition: 'height 0.2s ease-out', 'margin-bottom': '12px' },
     className
   })
 }
@@ -2634,13 +3250,21 @@ lister.showHideCardsBasedOnFilters = {
   hideAll: function () {
     lister.endCard.showLoading()
     const list = vState.queryParams.list
-    if (vState[list] && list !== 'tabs') {
+    if (list === 'history') {
+      // fold out each root group as a unit
+      vState.divs.main.querySelectorAll('[root]').forEach(inner => {
+        inner.style.transform = 'rotateY(90deg)'
+      })
+    } else if (list === 'tabs') {
+      // fold out each window box as a unit
+      vState.divs.main.querySelectorAll('div[style*="border-radius: 20px"]').forEach(win => {
+        win.style.transform = 'rotateY(90deg)'
+      })
+    } else if (vState[list]) {
       const { unfilteredItems, filteredItems } = vState[list]
       const items = [...filteredItems, ...unfilteredItems]
       for (let i = items.length - 1; i >= 0; i--) {
         const cardDiv = dg.el(lister.idFromMark(items[i]))
-        // const cardDiv = dg.el('vitem_id_' + items[i]._id)
-        // const cardDiv = lister.idFromMark(items[i])
         if (cardDiv) lister.showHideCard(cardDiv, false, { list })
       }
     }
@@ -3194,7 +3818,7 @@ lister.drawFilters = function () {
   const { list } = queryParams //  starFilters, dateFilters 
   const filterOuterParams = { style: { 'vertical-align': 'super', display: 'inline-block', 'margin-right': '5px', color: 'lightgrey' } }
   const filterInnerParams = {
-    style: { 'background-color': 'white', 'border-radius': '3px', display: 'inline-block', color: 'darkgrey', height: '29px', 'margin-right': '5px' }
+    style: { 'background-color': 'white', 'border-radius': '3px', display: 'inline-flex', 'align-items': 'center', color: 'darkgrey', height: '32px', padding: '0 2px', 'margin-right': '5px' }
   }
   if (list === 'marks') {
     const STARS = ['star', 'inbox', 'vHighlights', 'vNote']
@@ -3244,13 +3868,13 @@ lister.addFilterStar = function (star) {
   const existingFilters = queryParams.starFilters
   const chosen = (existingFilters.indexOf(star) > -1)
   return dg.span({
-    className: ('vulog_overlay_' + star + '_' + (chosen ? 'ch' : 'nc')),
-    style: { scale: 0.8 },
+    className: ('vulog-filter-icon vulog_overlay_' + star + '_' + (chosen ? 'ch' : 'nc')),
     onclick: async function (e) {
-      const newChosen = !(e.target.className.slice(-2) === 'ch')
+      const el = e.target.closest ? e.target.closest('[class*="vulog_overlay_"]') : e.target
+      const newChosen = !(el.className.includes('_ch'))
       if (newChosen) vState.queryParams.starFilters.push(star)
       if (!newChosen) vState.queryParams.starFilters.splice(queryParams.starFilters.indexOf(star), 1)
-      e.target.className = ('vulog_overlay_' + star + '_' + (newChosen ? 'ch' : 'nc'))
+      el.className = ('vulog-filter-icon vulog_overlay_' + star + '_' + (newChosen ? 'ch' : 'nc'))
       await lister.filterItemsInMainDivOrGetMore('searchChange')
     }
   })
