@@ -218,6 +218,8 @@
 .vulog_overlay_inbox_ch,
 .vulog_overlay_star_nc,
 .vulog_overlay_star_ch,
+.vulog_overlay_media_nc,
+.vulog_overlay_media_ch,
 .vulog_overlay_trash,
 .vulog_overlay_spiral {
   cursor: pointer;
@@ -236,13 +238,15 @@
 #vulog_overlay_archive_nc,
 .vulog_overlay_bookmark_nc,
 .vulog_overlay_inbox_nc,
-.vulog_overlay_star_nc {
+.vulog_overlay_star_nc,
+.vulog_overlay_media_nc {
   opacity: 0.25;
 }
 #vulog_overlay_archive_nc:hover,
 .vulog_overlay_bookmark_nc:hover,
 .vulog_overlay_inbox_nc:hover,
-.vulog_overlay_star_nc:hover {
+.vulog_overlay_star_nc:hover,
+.vulog_overlay_media_nc:hover {
   opacity: 0.7;
 }
 
@@ -251,6 +255,7 @@
 .vulog_overlay_bookmark_ch:hover,
 .vulog_overlay_inbox_ch:hover,
 .vulog_overlay_star_ch:hover,
+.vulog_overlay_media_ch:hover,
 .vulog_overlay_trash:hover {
   background-color: rgba(0,0,0,0.12);
 }
@@ -258,10 +263,12 @@
 /* Filter star icons: filled colored circle + white icon */
 .vulog-filter-icon.vulog_overlay_star_ch     { background-color: #e6b800; }
 .vulog-filter-icon.vulog_overlay_inbox_ch    { background-color: #1a6fcd; }
+.vulog-filter-icon.vulog_overlay_media_ch    { background-color: #6f49d8; }
 .vulog-filter-icon.vulog_overlay_vHighlights_ch { background-color: #1fa86a; }
 .vulog-filter-icon.vulog_overlay_vNote_ch    { background-color: #e0a800; }
 .vulog-filter-icon.vulog_overlay_star_ch::before     { color: white; }
 .vulog-filter-icon.vulog_overlay_inbox_ch::before    { color: white; }
+.vulog-filter-icon.vulog_overlay_media_ch::before    { color: white; }
 .vulog-filter-icon.vulog_overlay_vHighlights_ch::before { color: white; }
 .vulog-filter-icon.vulog_overlay_vNote_ch::before    { color: white; }
 /* Filter icons: compact size to fit the search bar */
@@ -334,6 +341,10 @@
 /* Inbox — steel blue */
 .vulog_overlay_inbox_nc::before  { font-family: FontAwesome; content: "\f01c"; font-size: 22px; color: #666; }
 .vulog_overlay_inbox_ch::before  { font-family: FontAwesome; content: "\f01c"; font-size: 22px; color: #1a6fcd; }
+
+/* Media — film reel, purple */
+.vulog_overlay_media_nc::before  { font-family: FontAwesome; content: "\f008"; font-size: 22px; color: #666; }
+.vulog_overlay_media_ch::before  { font-family: FontAwesome; content: "\f008"; font-size: 22px; color: #6f49d8; }
 
 /* Reply / Reply All */
 .vulog_overlay_reply::before    { font-family: FontAwesome; content: "\f112"; font-size: 24px; color: #6f49d8; }

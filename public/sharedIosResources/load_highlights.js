@@ -7,6 +7,11 @@
 let freezrMeta = null // used to pass onto overlay => utils to see if isOwnComment
 
 const initiateHighlights = function () {
+  // In-app browsed pages should not attempt to render highlights from the original bookmark.
+  if (typeof vulogIsOriginalUrl !== 'undefined' && isInIOSApp() && vulogIsOriginalUrl === false) {
+    vState.showThis = 'none'
+    return
+  }
   if (vState.pageInfoFromPage && !vState.pageInfoFromPage.isiframe) {
     const overlayOuter = document.getElementById('vulog_overlay_outer') || overlayUtils.makeEl('div', 'vulog_overlay_outer', 'cardOuter', '')
     // nb div only exists when 

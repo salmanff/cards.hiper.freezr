@@ -30,9 +30,52 @@ const MCSS = {
   TABS_BG: '#1b4a7a'    // tabs background (deep navy)
 }
 
+// Curated allowlist of query params to strip when canonicalizing a URL into a
+// purl. Conservative on purpose — only params that are *purely* tracking,
+// never content-bearing. Excludes ambiguous keys like 'ref', 'source', 'src',
+// 't', 's' that some sites use for legit routing/timestamps. Adding to this
+// set silently changes the canonical purl for affected URLs; existing stored
+// marks heal lazily via recanonicalizeMarkPurl on next mutation/lookup.
+const TRACKING_PARAMS = new Set([
+  // Google
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'utm_id', 'utm_name', 'utm_reader', 'utm_referrer',
+  'gclid', 'gclsrc', 'dclid', 'wbraid', 'gbraid', '_ga', '_gl',
+  // Facebook / Meta
+  'fbclid', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fb_ref',
+  // Instagram / TikTok
+  'igshid', 'igsh',
+  // Microsoft / Bing
+  'msclkid',
+  // Twitter / X
+  'twclid',
+  // Yandex / Baidu
+  'yclid', '_openstat',
+  // Email/marketing
+  'mc_cid', 'mc_eid', '_hsenc', '_hsmi', 'hsctatracking', 'mkt_tok',
+  'sfmc_id', '__s', 'vero_id', 'vero_conv', 'oly_anon_id', 'oly_enc_id',
+  'rb_clickid', 's_cid',
+  'pk_campaign', 'pk_kwd', 'piwik_campaign', 'piwik_kwd'
+])
+
 const pureUrlify = function (aUrl) {
   if (!aUrl) return null
+  // strip hash fragment first so an in-fragment '?' is not mistaken for a query
   if (aUrl.indexOf('#') > 0) aUrl = aUrl.slice(0, aUrl.indexOf('#'))
+  // canonicalize query: drop tracker params, sort survivors alphabetically
+  const qIdx = aUrl.indexOf('?')
+  if (qIdx > 0) {
+    const base = aUrl.slice(0, qIdx)
+    const kept = []
+    aUrl.slice(qIdx + 1).split('&').forEach(pair => {
+      if (!pair) return
+      const eqIdx = pair.indexOf('=')
+      const key = (eqIdx >= 0 ? pair.slice(0, eqIdx) : pair).toLowerCase()
+      if (!TRACKING_PARAMS.has(key)) kept.push(pair)
+    })
+    kept.sort()
+    aUrl = kept.length > 0 ? base + '?' + kept.join('&') : base
+  }
   if (aUrl.slice(-1) === '/') { aUrl = aUrl.slice(0, -1) }
   return aUrl.trim()
 }
@@ -584,7 +627,7 @@ const overlayUtils = {
     if (!mark & !options?.log) console.warn('no mark or log in drawstars ', { options })
     if (!mark) mark = convertLogToMark(options?.log || { purl })
     const stardiv = document.createElement('div')
-    const MAIN_STARS = ['bookmark', 'star', 'inbox', 'trash']
+    const MAIN_STARS = ['bookmark', 'star', 'inbox', 'media', 'trash']
 
     MAIN_STARS.forEach(aStar => {
       if (aStar === 'trash' && !options.drawTrash) {
@@ -662,6 +705,7 @@ const overlayUtils = {
         break
       case 'inbox':
       case 'star':
+      case 'media':
         chosenEnding = mark?.vStars && mark.vStars.includes(aStar) ? '_ch' : '_nc'
         break
       case 'bookmark':
@@ -889,7 +933,13 @@ const overlayUtils = {
     if (options?.showErr) {
       retDiv.appendChild(overlayUtils.makeEl('div', null, { color: 'red', 'background-color': 'yellow', border: '1px solid red', 'border-radius': '3px', padding: '3px', margin: '5px' }, 'Sorry! Error showing highlight!'))
     }
-    retDiv.append(quoteSection(hLight.string, theColor))
+    // Skip the quote frame entirely for image-only highlights so we
+    // don't render an empty "" "" frame above the thumbnails.
+    const hasString = !!(hLight.string && hLight.string.trim())
+    if (hasString) retDiv.append(quoteSection(hLight.string, theColor))
+    if (Array.isArray(hLight.vImages) && hLight.vImages.length > 0) {
+      retDiv.append(overlayUtils.drawHighlightImages(hLight.vImages, { compact: hasString }))
+    }
 
     const commentsOuter = overlayUtils.makeEl('div', null, { padding: '3px' })
     commentsOuter.append(overlayUtils.drawCommentsSection(purl, hLight, options))
@@ -962,6 +1012,76 @@ const overlayUtils = {
     highlightOuter.appendChild(retDiv)
 
     return highlightOuter
+  },
+  // Renders a small thumbnail strip for hLight.vImages inside the
+  // quote_outer frame. `compact` shrinks the row when shown alongside
+  // a text quote (so the thumbnails feel like a footnote to the quote);
+  // image-only highlights get a slightly bigger row since the strip is
+  // the whole content.
+  drawHighlightImages: function (vImages, opts = {}) {
+    const compact = !!opts.compact
+    const maxH = compact ? '60px' : '100px'
+    const row = overlayUtils.makeEl('div', null, {
+      display: 'flex',
+      'flex-wrap': 'wrap',
+      gap: '4px',
+      padding: compact ? '4px 5px 6px 5px' : '6px 5px 8px 5px',
+      'align-items': 'flex-start'
+    })
+    vImages.forEach(img => {
+      if (!img || !img.url) return
+      const a = overlayUtils.makeEl('a', null, {
+        display: 'inline-block',
+        'line-height': '0',
+        'border-radius': '4px',
+        overflow: 'hidden',
+        cursor: 'pointer'
+      })
+      a.setAttribute('href', img.url)
+      a.setAttribute('target', '_blank')
+      a.setAttribute('rel', 'noopener noreferrer')
+      if (img.alt) a.setAttribute('title', img.alt)
+      const imgEl = overlayUtils.makeEl('img', null, {
+        'max-height': maxH,
+        'max-width': '160px',
+        'object-fit': 'contain',
+        'background-color': '#f6f7f8',
+        border: '1px solid #e1e4e8',
+        'border-radius': '4px',
+        display: 'block'
+      })
+      imgEl.setAttribute('src', img.url)
+      if (img.alt) imgEl.setAttribute('alt', img.alt)
+      imgEl.setAttribute('loading', 'lazy')
+      // If the image fails to load (broken link, hotlink-protected,
+      // CORS-blocked thumbnail, etc.) we fall back to a small clickable
+      // text chip so the highlight still surfaces the image URL. The
+      // "image n/a:" prefix makes it obvious to the user that this is a
+      // placeholder for an image we couldn't fetch, not a regular caption.
+      imgEl.onerror = function () {
+        const chipLabel = img.alt ? ('image n/a: ' + img.alt) : 'image n/a'
+        const chip = overlayUtils.makeEl('span', null, {
+          display: 'inline-block',
+          padding: '6px 10px',
+          margin: '2px',
+          'font-size': '11px',
+          'line-height': '1.3',
+          color: '#666',
+          'background-color': '#f0f2f5',
+          'border-radius': '4px',
+          border: '1px solid #d1d5db',
+          'max-width': '220px',
+          overflow: 'hidden',
+          'text-overflow': 'ellipsis',
+          'white-space': 'nowrap'
+        }, chipLabel)
+        if (img.alt) chip.setAttribute('title', chipLabel)
+        a.replaceChild(chip, imgEl)
+      }
+      a.appendChild(imgEl)
+      row.appendChild(a)
+    })
+    return row
   },
   drawHlightCommentsBox: function (purl, hLight, options) {
     //  used in side bar from overlay and also in PDF viewer

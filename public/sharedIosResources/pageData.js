@@ -297,6 +297,10 @@ const getCookies = function () {
   // old: let splits = oneC.split('='); cookies[splits[0].replace(/\./g, '_')] = splits[1]
   return cookies
 }
+// Path-only canonical URL for file-extension matching (e.g. detecting that a
+// 3rd-party `<script src="lib.js?v=12345">` ends in '.js'). Strips the entire
+// query, unlike pureUrlify which preserves content-bearing query params.
+// NOT for mark canonicalization — use pureUrlify for that.
 const corePurl = function (aUrl) {
   aUrl = pureUrlify(aUrl)
   return aUrl.split('?')[0]

@@ -66,11 +66,19 @@ lister.setUrlParams = function () {
 }
 lister.getQueryParams = function () {
   vState.queryParams.words = lister.getSearchBoxParams(vState.divs.searchBox)
-  const readDate = vState.divs?.dateFilter?.value ? new Date(vState.divs.dateFilter.value) : null
-  // if (readDate) readDate.setUTCHours(23,59,59,999)
-  if (readDate) readDate.setDate(readDate.getDate() + 1)
-  vState.queryParams.date = isNaN(readDate) ? null : readDate
-  if (isNaN(readDate)) vState.divs.dateFilter.value = ''
+  const dateInputValue = vState.divs?.dateFilter?.value
+  const readDate = dateInputValue ? new Date(dateInputValue) : null
+  if (readDate && isNaN(readDate.getTime())) {
+    // user typed garbage - clear and ignore
+    vState.queryParams.date = null
+    vState.divs.dateFilter.value = ''
+  } else if (readDate) {
+    // "Latest date" semantics: keep items <= the chosen day's end (i.e. < next day midnight, local time)
+    readDate.setDate(readDate.getDate() + 1)
+    vState.queryParams.date = readDate
+  } else {
+    vState.queryParams.date = null
+  }
   return vState.queryParams
   // vState.queryParams.filterStars shoudl already be set... but really should be moved here for consistency
 }
@@ -161,6 +169,22 @@ lister.createOuterDomStructure = function () {
 }
 lister.endCard = {
   inited: false,
+  scheduledTimer: null,
+  cancelScheduled: function () {
+    if (lister.endCard.scheduledTimer) {
+      clearTimeout(lister.endCard.scheduledTimer)
+      lister.endCard.scheduledTimer = null
+    }
+  },
+  scheduleShowMore: function (delay) {
+    // cancels any prior pending showMore so rapid filter calls don't flicker
+    // the "Searched back to" box vs. the spinner.
+    lister.endCard.cancelScheduled()
+    lister.endCard.scheduledTimer = setTimeout(() => {
+      lister.endCard.scheduledTimer = null
+      lister.endCard.showMore()
+    }, delay)
+  },
   endCardStyle: { display: 'none', margin: '50px 10px', 'text-align': 'center', cursor: 'pointer', 'border-radius': '5px', background: 'white', padding: '5px' },
   create: function () {
     const moreButt = dg.div({
@@ -176,8 +200,11 @@ lister.endCard = {
       rootMargin: '0px',
       threshold: 0.1
     }
-    const moreButtObserver = new IntersectionObserver(function () {
-      if (lister.endCard.inited) lister.filterItemsInMainDivOrGetMore('auto')
+    const moreButtObserver = new IntersectionObserver(function (entries) {
+      // Only fire on entering view, not on leaving - otherwise showLoading()
+      // hiding moreButt would itself trigger another auto-fetch.
+      const isEntering = entries.some(e => e.isIntersecting)
+      if (lister.endCard.inited && isEntering) lister.filterItemsInMainDivOrGetMore('auto')
       lister.endCard.inited = true
     }, observerOptions)
     moreButtObserver.observe(moreButt)
@@ -194,11 +221,19 @@ lister.endCard = {
       moreButt, noMoreButt, loadingButt)
   },
   showMore: function () {
+    lister.endCard.cancelScheduled()
     const list = vState.queryParams.list
+    const dates = vState[list]?.dates || {}
+    // For history we paginate by creation date (server-side), so oldestCreated
+    // is what reflects how far back we've actually loaded. Using oldestModified
+    // can stay stuck near "today" if loaded items were all re-visited recently.
+    const backToTimestamp = (list === 'history')
+      ? (dates.oldestCreated || dates.oldestModified)
+      : dates.oldestModified
     const moreButt = dg.el('vulogMoreButt', { clear: true, show: true })
     moreButt.appendChild(dg.div(
-      dg.span('Searched back to '), dg.br(),
-      dg.span(new Date(vState[list].dates.oldestModified).toDateString()), dg.br(),
+      dg.span(list === 'history' ? 'Visited back to ' : 'Searched back to '), dg.br(),
+      dg.span(backToTimestamp ? new Date(backToTimestamp).toDateString() : ''), dg.br(),
       dg.span({ style: { color: 'blue' } }, ' Get More...')))
     const endCard = moreButt.parentElement
     endCard.style.display = 'block'
@@ -206,6 +241,7 @@ lister.endCard = {
     moreButt.nextSibling.nextSibling.style.display = 'none' // loading
   },
   showNoMore: function () {
+    lister.endCard.cancelScheduled()
     const moreButt = dg.el('vulogMoreButt', { clear: true, hide: true })
     moreButt.style.display = 'none'
     const nomoreButt = moreButt.nextSibling
@@ -231,9 +267,9 @@ lister.endCard = {
           text = 'Nothing more to show !'
       }
     }
-    if (!vState.recordHistory && list === 'history') {
+    if (!vState.recordHistory && list === 'history' && vState.isExtension) {
       text = 'To log all your browsing history, go to settings and enable that. (This is turned off by default.)'
-      if (vState[list].unfilteredItems && vState[list].unfilteredItems.length > 0) text = 'YOu have turned off the logging of browing history. If you want to log your browsing history, Go to settings and turn it back on.'
+      if (vState[list].unfilteredItems && vState[list].unfilteredItems.length > 0) text = 'You have turned off the logging of browsing history. If you want to log your browsing history, Go to settings and turn it back on.'
     }
     nomoreButt.innerText = text || 'Nothing more to show!!'
     nomoreButt.style.display = 'block'
@@ -243,6 +279,7 @@ lister.endCard = {
     endCard.style.display = 'block'
   },
   hide: function () {
+    lister.endCard.cancelScheduled()
     const moreButt = dg.el('vulogMoreButt', { clear: true, hide: true })
     // const endCard = moreButt.parentElement
     // endCard.style.display = 'none'
@@ -250,6 +287,7 @@ lister.endCard = {
     if (moreButt) moreButt.nextSibling.nextSibling.style.display = 'block' // loading
   },
   showLoading: function () {
+    lister.endCard.cancelScheduled()
     const moreButt = dg.el('vulogMoreButt')
     moreButt.style.display = 'none'
     moreButt.nextSibling.style.display = 'none' // 'nomore'
@@ -422,22 +460,35 @@ lister.drawCardsOnMainDiv = async function (list, items, mainDiv, options) {
     }
 
     // 3 - slip in existing roots oldRootsWithNewItems
+    // Append-only: don't wipe innerHTML or the user sees every existing card
+    // disappear and redraw on every "Get More" / auto-fetch. Just insert the
+    // truly-new items in their sorted position.
     oldRootsWithNewItems.forEach((root) => {
       const inner = outer.querySelector('[root="' + root + '"]')
-      if (inner) {
-        inner.innerHTML = ''
-        const fullList = removeDuplicateTabidPurls(roots[root].children.sort(sortBycreatedDate))
-        fullList.unshift(roots[root].rootItem)
-        fullList.forEach((logItem, index) => {
-          const theLogDiv = lister.drawlogItem(logItem, { tabtype: list })
-          if (theLogDiv){
-            inner.appendChild(theLogDiv)
-            if (index < fullList.length - 1) theLogDiv.setAttribute('vCollapsible', false)
-          }
-        })
-      } else {
+      if (!inner) {
         console.warn('could not find inner for root ' + root)
+        return
       }
+      const fullList = removeDuplicateTabidPurls(roots[root].children.sort(sortBycreatedDate))
+      fullList.unshift(roots[root].rootItem)
+      fullList.forEach((logItem, index) => {
+        const cardId = lister.idFromMark(logItem)
+        if (document.getElementById(cardId)) return // already drawn
+        const theLogDiv = lister.drawlogItem(logItem, { tabtype: list })
+        if (!theLogDiv) return
+        // Insert before the next existing card from fullList (preserves sort order).
+        let insertBefore = null
+        for (let j = index + 1; j < fullList.length; j++) {
+          const nextCard = document.getElementById(lister.idFromMark(fullList[j]))
+          if (nextCard && nextCard.parentElement && nextCard.parentElement.parentElement === inner) {
+            insertBefore = nextCard.parentElement
+            break
+          }
+        }
+        if (insertBefore) inner.insertBefore(theLogDiv, insertBefore)
+        else inner.appendChild(theLogDiv)
+        if (index < fullList.length - 1) theLogDiv.setAttribute('vCollapsible', false)
+      })
     })
     // todo temp cards should be also added to filtered items
 
@@ -1100,21 +1151,23 @@ lister.styleCardNotesBox = function (notesBox, markOnMark, expandedView) {
   }
 }
 lister.smallCardShareCount = function (mark) {
-  if (!mark?._accessible) return 0
-  return Object.keys(mark._accessible).filter(k => mark._accessible[k]).length
+  if (!Array.isArray(mark?._accessibles) || mark._accessibles.length === 0) return 0
+  const uniqueGrantees = new Set(mark._accessibles.filter(e => e.granted).map(e => e.grantee))
+  return uniqueGrantees.size
 }
-lister.smallCardDateString = function (createdDate, modifiedDate, expandedView) {
+lister.smallCardDateString = function (createdDate, modifiedDate, expandedView, labelOverride) {
   const fmtDate = function (d) {
     if (!d || isNaN(d)) return '—'
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + '  ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   if (expandedView) {
-    let dateString = 'Created: ' + fmtDate(createdDate)
-    if (modifiedDate && modifiedDate - createdDate > 1000 * 60) {
+    let dateString = (labelOverride || 'Created') + ': ' + fmtDate(createdDate)
+    if (!labelOverride && modifiedDate && modifiedDate - createdDate > 1000 * 60) {
       dateString += '   ·   Modified: ' + fmtDate(modifiedDate)
     }
     return dateString
   }
+  if (labelOverride) return labelOverride + ' ' + overlayUtils.smartDate(createdDate)
   const hasModified = (modifiedDate - createdDate > 1000 * 60 * 60 * 24)
   const label = hasModified ? 'Updated ' : 'Created '
   const dateToUse = hasModified ? modifiedDate : createdDate
@@ -1365,7 +1418,7 @@ lister.drawlogItem = function (logItem, opt = {}) {
   itemdiv.appendChild(lister.drawReferrerHistory(logItem))
 
   const dateToUse = new Date(logItem.fj_modified_locally || logItem._date_modified || logItem.vCreated)
-  const dateString = lister.smallCardDateString(dateToUse, dateToUse, expandedView)
+  const dateString = lister.smallCardDateString(dateToUse, dateToUse, expandedView, 'Visited on:')
   itemdiv.appendChild(dg.div({ className: 'dateString', style: lister.smallCardDateStyles(expandedView) }, dateString))
 
   const hLightOptions = {
@@ -2104,6 +2157,10 @@ lister.openOutside = function (url, options) {
 lister.getRecentTabDataToUpdateState = async function () {
   vState.allTabs = {}
   const allTabDate = await vState.getRecentTabData()
+  if (!allTabDate?.currentTabs) {
+    console.warn('no currentTabs', { allTabDate })
+    return []
+  }
   allTabDate.currentTabs.forEach(tab => {
     if (vState.allTabs[pureUrlify(tab.url)]) {
       if (!vState.allTabs[pureUrlify(tab.url)].zSameTabs) vState.allTabs[pureUrlify(tab.url)].zSameTabs = []
@@ -2183,7 +2240,9 @@ lister.allPeopleSharedWith = function (currentMark) {
   }, dg.span('Sharing Options'))
   let count = 0
   const sharedWith = dg.span('Shared with: ')
-  if (currentMark?._accessible?._public) {
+  const accessibles = Array.isArray(currentMark?._accessibles) ? currentMark._accessibles : []
+  const uniqueGrantees = [...new Set(accessibles.filter(e => e.granted).map(e => e.grantee))]
+  if (uniqueGrantees.includes('_public')) {
     sharedWith.appendChild(dg.span({
       style: { color: 'purple' },
       title: 'Every one has access',
@@ -2193,16 +2252,14 @@ lister.allPeopleSharedWith = function (currentMark) {
     sharedWith.appendChild(dg.span(', '))
     count++
   }
-  if (currentMark?._accessible) {
-    for (const [searchName] of Object.entries(currentMark._accessible)) {
-      if (searchName !== '_public') {
-        sharedWith.appendChild(dg.span({
-          style: { color: 'purple' },
-          title: searchName
-        }, searchName.split('@')[0]))
-        sharedWith.appendChild(dg.span(', '))
-        count++
-      }
+  for (const grantee of uniqueGrantees) {
+    if (grantee !== '_public') {
+      sharedWith.appendChild(dg.span({
+        style: { color: 'purple' },
+        title: grantee
+      }, grantee.split('@')[0]))
+      sharedWith.appendChild(dg.span(', '))
+      count++
     }
   }
   // add public
@@ -3094,17 +3151,14 @@ const getPrivateUrl = function (privateMark) {
   return accessibleObj.public_id + '?code=' + code
 }
 const getFeedMark = function (purl, feedName) {
-  // OLD FORMAT: still reads _accessible object. These need to be updated once private-feed sharing is re-enabled.
   if (!purl) return false
   const sharedMarksList = vState.sharedmarks?.lookups ? vState.sharedmarks.lookups[purl] : null
-  // takes a list of queried sharedmakrks to see if any are public
   if (!sharedMarksList || sharedMarksList.length === 0) return null
-  return sharedMarksList.find(mark => (
-    !mark.isPublic &&
-    mark._accessible?._privatefeed &&
-    mark._accessible._privatefeed['cards_hiper_freezr/public_link']?.granted &&
-    mark._accessible._privatefeed['cards_hiper_freezr/public_link']?.names.indexOf(feedName) > -1
-  ))
+  return sharedMarksList.find(mark => {
+    if (mark.isPublic) return false
+    const accessibleObj = getPublicLinkAccessible(mark, '_privatefeed')
+    return accessibleObj?.granted && accessibleObj?.privateFeedNames?.indexOf(feedName) > -1
+  })
 }
 const getPublishDate = function (sharedMark, type) {
   const accessibleObj = getPublicLinkAccessible(sharedMark, type)
@@ -3166,11 +3220,22 @@ lister.filterItemsInMainDivOrGetMore = async function (source) {
   const mainDiv = vState.divs.main
   const list = vState.queryParams.list
 
+  const SHOW_INCREMENTS = 20
+  const MAX_AUTO_INCREMENTS = 4
+
+  // Break infinite observer-driven loop: an 'auto' call comes from the
+  // IntersectionObserver on moreButt, which can fire whenever moreButt is
+  // re-shown. Once we've used up our auto budget, we just need to make sure
+  // the manual "Get More" card is visible (replacing any leftover spinner
+  // from the previous autoTry's showLoading) and stop recursing.
+  if (source === 'auto' && vState.loadState.autoTries >= MAX_AUTO_INCREMENTS) {
+    lister.endCard.scheduleShowMore(0)
+    return
+  }
+
   lister.endCard.showLoading()
   // if (source !== 'auto') window.scrollTo(0, 0)
 
-  const SHOW_INCREMENTS = 20
-  const MAX_AUTO_INCREMENTS = 4
   vState.loadState.source = source
   if (source !== 'auto') { vState.loadState.autoTries = 0 }
   if (source === 'initialLoad' || source === 'searchChange') {
@@ -3200,7 +3265,7 @@ lister.filterItemsInMainDivOrGetMore = async function (source) {
   if (vState.loadState.gotAll) {
     lister.endCard.showNoMore()
   } else if (unShownItemRemain || newShownNum > vState.shownNum) {
-    setTimeout(() => { lister.endCard.showMore() }, 300)
+    lister.endCard.scheduleShowMore(300)
     // doNothing - more button should work
   } else if (vState.loadState.autoTries < MAX_AUTO_INCREMENTS) {
     vState.loadState.autoTries++
@@ -3211,7 +3276,11 @@ lister.filterItemsInMainDivOrGetMore = async function (source) {
       lister.endCard.showNoMore()
     } else {
       lister.drawCardsOnMainDiv(list, newItems, mainDiv)
-      // test
+      // Apply the filter synchronously so cards that don't match never
+      // visibly rotate in only to be hidden 200ms later.
+      if (lister.showHideCardsBasedOnFilters[list]) {
+        lister.showHideCardsBasedOnFilters[list](newShowTotal, source)
+      }
       setTimeout(async () => {
         await lister.filterItemsInMainDivOrGetMore('auto')
       }, 200)
@@ -3220,7 +3289,7 @@ lister.filterItemsInMainDivOrGetMore = async function (source) {
     // NB if (newShowTotal === vState.loadState.totalShown) {  Nothing new was shown as a result of the filter... should search more
   } else {
     // manual butt
-    setTimeout(() => { lister.endCard.showMore() }, 500)
+    lister.endCard.scheduleShowMore(500)
   }
   vState.loadState.totalShown = newShowTotal
   vState.shownNum = newShownNum
@@ -3283,7 +3352,7 @@ lister.showHideCardsBasedOnFilters = {
       if (fits) {
         if (queryParams.starFilters && queryParams.starFilters.length > 0) {
           queryParams.starFilters.forEach(starFilter => {
-            if (['inbox', 'star'].indexOf(starFilter) > -1) {
+            if (['inbox', 'star', 'media'].indexOf(starFilter) > -1) {
               if (!item.vStars || item.vStars.indexOf(starFilter) < 0) fits = false
             } else if (starFilter === 'vHighlights') {
               if (!item.vHighlights || item.vHighlights.length === 0) fits = false
@@ -3352,7 +3421,7 @@ lister.showHideCardsBasedOnFilters = {
       fits = lister.fitsWordSearchCriteria(item?.vSearchString, queryParams.words)
       if (fits) {
         if (queryParams.date &&
-          (item.vCreated || item._date_created) > queryParams.date.getTime()
+          (item.fj_modified_locally || item._date_modified) > queryParams.date.getTime()
         ) fits = false
       }
       return fits
@@ -3821,7 +3890,7 @@ lister.drawFilters = function () {
     style: { 'background-color': 'white', 'border-radius': '3px', display: 'inline-flex', 'align-items': 'center', color: 'darkgrey', height: '32px', padding: '0 2px', 'margin-right': '5px' }
   }
   if (list === 'marks') {
-    const STARS = ['star', 'inbox', 'vHighlights', 'vNote']
+    const STARS = ['star', 'inbox', 'media', 'vHighlights', 'vNote']
     filterDiv.appendChild(dg.div(filterOuterParams, 'Filters: '))
     const includeFilters = dg.div(filterInnerParams,
       dg.span({ style: { 'vertical-align': 'super' } }, ' ')) // Must have

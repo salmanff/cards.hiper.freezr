@@ -76,8 +76,9 @@ function collapseIfExpanded(element) {
 }
 
 function smallSpinner(styleOptions) {
-  const el = document.createElement('img')
-  el.src = freezr?.app?.isWebBased ? '/app_files/@public/info.freezr.public/public/static/ajaxloaderBig.gif' : '/freezr/static/ajaxloaderBig.gif'
+  // Uses .freezr-logo-spinner from freezr_core.css (info.freezr.public)
+  const el = document.createElement('div')
+  el.className = 'freezr-logo-spinner'
   Object.keys(styleOptions || {}).forEach(key => { el.style[key] = styleOptions[key] })
 
   const width = styleOptions?.width || '20px'

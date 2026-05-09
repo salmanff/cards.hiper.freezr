@@ -692,28 +692,47 @@ if (!isIos()) {
               console.warn('elements did not load in time for freezrChromeExtInstallLink')
             } else {
               document.getElementById('freezrChromeExtInstallLink').style.display = 'none'
-              if (response.freezrInfo?.serverAddress === window.location.origin) {
+              const sameServer = response.freezrInfo?.serverAddress === window.location.origin
+              const credsValid = sameServer && !response.freezrInfo?.credentialsExpired
+              if (credsValid) {
+                // Already logged in to this server with valid credentials — nothing to prompt.
+                return
+              }
+              if (sameServer) {
                 document.getElementById('freezrChromeExtensionCredsReplace').style.display = 'block'
               } else if (!response.freezrInfo?.serverAddress) {
                 document.getElementById('freezrChromeExtensionCredsReplace').style.display = 'block'
                 document.getElementById('freezrChromeExtensionCredsReplace').firstChild.nextSibling.innerHTML = 'Log in'
               } // else - the below becomes hidden and thus irrelevant
-              const redoOnclicks = function() {
-                waitForELAndExecute('freezrNewLoginUrl', {}, function(loadResp) {
-                  if (!loadResp.success) {
-                    console.warn('elements did not load in time for freezrChromeExtInstallLink')
-                  } else { 
-                    tryLoggingIn(document.getElementById('freezrNewLoginUrl')?.innerText, response.freezrInfo, function (resp) {
-                      if (resp.success) document.getElementById('freezrChromeExtensionCredsReplace').firstChild.nextSibling.innerHTML = 'Credentials registered successfully!'
-                      if (!resp.success) document.getElementById('freezrAppSettingsMessages').innerHTML = 'Error updating credentials! Please copy the url into your app'
-                      document.getElementById('freezrChromeExtensionCredsReplace').firstChild.nextSibling.onclick = null
-                      document.getElementById('freezrChromeExtensionCredsReplace').firstChild.firstChild.onclick = null
-                    })
+              const credsBox = document.getElementById('freezrChromeExtensionCredsReplace')
+              const credsText = credsBox.firstChild.nextSibling
+              const messagesEl = document.getElementById('freezrAppSettingsMessages')
+              let loggedInSuccessfully = false
+              const handleUrlIfPresent = function() {
+                if (loggedInSuccessfully) return
+                const urlEl = document.getElementById('freezrNewLoginUrl')
+                if (!urlEl || !urlEl.innerText) return
+                // Each generated URL is a fresh element from showAppSettingsMessage's
+                // innerHTML replacement. Tag it so we don't re-attempt login on
+                // unrelated DOM mutations within the same URL's lifetime.
+                if (urlEl.dataset.freezrExtTried === 'yes') return
+                urlEl.dataset.freezrExtTried = 'yes'
+                tryLoggingIn(urlEl.innerText, response.freezrInfo, function (resp) {
+                  if (resp.success) {
+                    loggedInSuccessfully = true
+                    credsText.innerHTML = 'Credentials registered successfully!'
+                    if (urlObserver) urlObserver.disconnect()
+                  } else if (messagesEl) {
+                    messagesEl.innerHTML = 'Error updating credentials! Please copy the url into your app'
                   }
                 })
               }
-              document.getElementById('freezrChromeExtensionCredsReplace').firstChild.nextSibling.onclick = redoOnclicks
-              document.getElementById('freezrChromeExtensionCredsReplace').firstChild.firstChild.onclick = redoOnclicks
+              let urlObserver = null
+              if (messagesEl) {
+                urlObserver = new MutationObserver(handleUrlIfPresent)
+                urlObserver.observe(messagesEl, { childList: true, subtree: true })
+                handleUrlIfPresent() // catch the case where the URL is already present
+              }
             }
           })
         }
@@ -1410,6 +1429,10 @@ const highlightSelection = function () {
       focusOffset: selection.focusOffset,
       id: hlightIdentifier
     }
+    // Same as start_highlight.js: capture <img> tags inside the selection
+    // so they appear as thumbnails next to the quote in lister/popup.
+    const extractedImgs = extractImagesFromRange(selection.getRangeAt(0))
+    if (extractedImgs.length > 0) theHighlight.vImages = extractedImgs
     // var color = 'yellowgreen' // todo: Get from preferences or from resp below
     // highlightFromSelection(selectionString, container, selection, color)
 
@@ -1449,6 +1472,29 @@ const highlightSelection = function () {
         }
       )
     }
+  }
+
+  // Walks a Range's contents and returns an array of {url, alt} entries
+  // for every <img> that lives inside the selection. Mirrors the helper
+  // in main/start_highlight.js so iOS/overlay highlights also pick up
+  // embedded images.
+  function extractImagesFromRange (range) {
+    const out = []
+    if (!range) return out
+    try {
+      const fragment = range.cloneContents()
+      if (!fragment || !fragment.querySelectorAll) return out
+      const seen = new Set()
+      fragment.querySelectorAll('img').forEach(img => {
+        const url = img.currentSrc || img.src || img.getAttribute('src') || ''
+        if (!url || seen.has(url)) return
+        seen.add(url)
+        out.push({ url, alt: img.alt || '' })
+      })
+    } catch (e) {
+      console.warn('extractImagesFromRange failed', e)
+    }
+    return out
   }
 
   // From an DOM element, get a query to that DOM element
