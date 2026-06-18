@@ -167,13 +167,22 @@ const vState = {
     let q = { _date_modified: { $lt: oldestModified }, fj_deleted: { $ne: true } }
     if (list === 'sentMsgs' || list === 'gotMsgs') q.app_id = 'cards.hiper.freezr'
 
+    // Is the user actually searching/filtering? If so we must ask the server
+    // for items that FIT the criteria, rather than paging in the next batch of
+    // unfiltered older items and letting the front end hide the non-matches
+    // (the "fetch all records then filter" behaviour we want to avoid).
+    const qp = params?.queryParams
+    const hasActiveFilter = Boolean(qp?.words && ('' + qp.words).trim()) ||
+      (Array.isArray(qp?.starFilters) && qp.starFilters.length > 0) ||
+      Boolean(qp?.date)
+
     let typeReturned
 
-    if (!gotCount || gotCount < 100) { // 200 is a random limit for not sending back unfiltered items
+    if (!hasActiveFilter && (!gotCount || gotCount < 100)) { // 100 is a random limit for not sending back unfiltered items
       typeReturned = 'unfilteredItems'
     } else {
       typeReturned = 'filteredItems'
-      q = convertListerParamsToDbQuery(params.queryParams, q)
+      q = convertListerParamsToDbQuery(qp, q)
     }
     try {
       // onsole.log('environmentSpecificGetOlderItems', { apptable, q, count: getCount })

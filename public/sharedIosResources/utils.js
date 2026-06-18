@@ -30,36 +30,36 @@ const MCSS = {
   TABS_BG: '#1b4a7a'    // tabs background (deep navy)
 }
 
-// Curated allowlist of query params to strip when canonicalizing a URL into a
-// purl. Conservative on purpose — only params that are *purely* tracking,
-// never content-bearing. Excludes ambiguous keys like 'ref', 'source', 'src',
-// 't', 's' that some sites use for legit routing/timestamps. Adding to this
-// set silently changes the canonical purl for affected URLs; existing stored
-// marks heal lazily via recanonicalizeMarkPurl on next mutation/lookup.
-const TRACKING_PARAMS = new Set([
-  // Google
-  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
-  'utm_id', 'utm_name', 'utm_reader', 'utm_referrer',
-  'gclid', 'gclsrc', 'dclid', 'wbraid', 'gbraid', '_ga', '_gl',
-  // Facebook / Meta
-  'fbclid', 'fb_action_ids', 'fb_action_types', 'fb_source', 'fb_ref',
-  // Instagram / TikTok
-  'igshid', 'igsh',
-  // Microsoft / Bing
-  'msclkid',
-  // Twitter / X
-  'twclid',
-  // Yandex / Baidu
-  'yclid', '_openstat',
-  // Email/marketing
-  'mc_cid', 'mc_eid', '_hsenc', '_hsmi', 'hsctatracking', 'mkt_tok',
-  'sfmc_id', '__s', 'vero_id', 'vero_conv', 'oly_anon_id', 'oly_enc_id',
-  'rb_clickid', 's_cid',
-  'pk_campaign', 'pk_kwd', 'piwik_campaign', 'piwik_kwd'
-])
+// Source of truth: sharedIosResources/tracking_params.json (shared with iOS app).
+// Populated async on Chrome; on iOS the native app reads the JSON directly.
+// Await trackingParamsReady before calling pureUrlify if timing matters.
+const TRACKING_PARAMS = new Set()
+const trackingParamsReady = (async () => {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.getURL) return
+  const load = async () => {
+    const resp = await fetch(chrome.runtime.getURL('sharedIosResources/tracking_params.json'))
+    const params = await resp.json()
+    if (Array.isArray(params)) {
+      TRACKING_PARAMS.clear()
+      params.forEach(p => TRACKING_PARAMS.add(p))
+    }
+  }
+  try {
+    await load()
+  } catch (e) {
+    console.warn('[tracking_params] first load failed, retrying in 2s:', e)
+    await new Promise(r => setTimeout(r, 2000))
+    try {
+      await load()
+    } catch (e2) {
+      console.error('[tracking_params] failed to load after retry — tracking params will not be stripped:', e2)
+    }
+  }
+})()
 
 const pureUrlify = function (aUrl) {
   if (!aUrl) return null
+  if (TRACKING_PARAMS.size === 0) console.warn('[tracking_params] pureUrlify called before params loaded — tracking params will not be stripped for:', aUrl)
   // strip hash fragment first so an in-fragment '?' is not mistaken for a query
   if (aUrl.indexOf('#') > 0) aUrl = aUrl.slice(0, aUrl.indexOf('#'))
   // canonicalize query: drop tracker params, sort survivors alphabetically
@@ -119,7 +119,19 @@ const convertListerParamsToDbQuery = function (queryParams, q) {
       if (word && word.length > 1 && word.indexOf('!') === 0) q.$and.push({ vSearchString: { $regex: '^((?!' + safeRegex(word.slice(1)) + ').)*$' } })
     })
   }
-  // DO DATES
+  // DATES - "latest date" filter: keep items modified before queryParams.date
+  // (the front end sets .date to the day AFTER the chosen day, at midnight).
+  // queryParams.date may arrive as a Date (web) or an ISO string (serialized
+  // across the extension's chrome.runtime.sendMessage), so normalise to ms.
+  if (queryParams?.date) {
+    const dateMs = (queryParams.date instanceof Date)
+      ? queryParams.date.getTime()
+      : new Date(queryParams.date).getTime()
+    if (!isNaN(dateMs)) {
+      if (!q.$and) q.$and = []
+      q.$and.push({ _date_modified: { $lt: dateMs } })
+    }
+  }
   if (q.$and && q.$and.length === 1) {
     // .. remove and
   }
@@ -2503,7 +2515,16 @@ const isIOSPDFWithEmptyBody = function () {
       document.title.includes('PDF Viewer - Hiper Cards')) {
     return false;
   }
-  
+
+  // 2026-05
+  // Primary signal: WebKit's document.contentType. This is set when WKWebView
+  // renders an application/pdf response, regardless of whether it also exposes
+  // PDF text into document.body.textContent (which it now does on iOS 17/18+,
+  // breaking the older empty-body heuristic). Function name kept for
+  // continuity with callers.
+  if (document.contentType === 'application/pdf') return true;
+
+  // Fallback: legacy empty-body + PDF-shaped URL heuristic.
   const bodyExists = !!document.body;
   const bodyTextContent = bodyExists ? document.body.textContent : '';
   const hasEmptyBody = !bodyExists || bodyTextContent === '';
